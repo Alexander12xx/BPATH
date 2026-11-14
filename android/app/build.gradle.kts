@@ -52,6 +52,7 @@ android {
 }
 
 dependencies {
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.core:core:1.15.0")
     implementation("androidx.webkit:webkit:1.12.1")
 }
