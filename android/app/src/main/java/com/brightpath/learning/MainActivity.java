@@ -10,6 +10,8 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -20,6 +22,8 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.biometric.BiometricManager;
+import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
@@ -27,20 +31,32 @@ import androidx.webkit.WebViewClientCompat;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyStore;
+import java.util.Base64;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.GCMParameterSpec;
+import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 201;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 202;
+    private static final String BIOMETRIC_KEY_ALIAS = "brightpath.biometric.session";
+    private static final String BIOMETRIC_PREFS = "brightpath_biometric_session";
     private WebView webView;
     private ValueCallback<Uri[]> pendingFileCallback;
     private Uri pendingCameraUri;
     private String pendingReminderTitle;
     private String pendingReminderMessage;
     private int pendingReminderMinutes;
+    private String biometricRequestId;
+    private boolean biometricUnlock;
     private WebViewAssetLoader assetLoader;
 
     @Override
@@ -180,6 +196,102 @@ public final class MainActivity extends Activity {
         });
     }
 
+    private boolean canUseBiometric() {
+        return BiometricManager.from(this).canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG) == BiometricManager.BIOMETRIC_SUCCESS;
+    }
+
+    private SecretKey getBiometricKey() throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+        keyStore.load(null);
+        if (keyStore.containsAlias(BIOMETRIC_KEY_ALIAS)) {
+            return (SecretKey) keyStore.getKey(BIOMETRIC_KEY_ALIAS, null);
+        }
+        KeyGenerator generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
+        KeyGenParameterSpec.Builder spec = new KeyGenParameterSpec.Builder(
+                BIOMETRIC_KEY_ALIAS, KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setUserAuthenticationRequired(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            spec.setUserAuthenticationParameters(0, KeyProperties.AUTH_BIOMETRIC_STRONG);
+        } else {
+            spec.setUserAuthenticationValidityDurationSeconds(-1);
+        }
+        generator.init(spec.build());
+        return generator.generateKey();
+    }
+
+    private BiometricPrompt createBiometricPrompt() {
+        return new BiometricPrompt(this, ContextCompat.getMainExecutor(this),
+                new BiometricPrompt.AuthenticationCallback() {
+                    @Override
+                    public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                        super.onAuthenticationError(errorCode, errString);
+                        biometricResult(false, errString.toString());
+                    }
+
+                    @Override
+                    public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                        super.onAuthenticationSucceeded(result);
+                        try {
+                            Cipher cipher = result.getCryptoObject().getCipher();
+                            if (biometricUnlock) {
+                                byte[] encrypted = Base64.getDecoder().decode(
+                                        getSharedPreferences(BIOMETRIC_PREFS, MODE_PRIVATE).getString("data", ""));
+                                String payload = new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
+                                runInApp("window.BrightPathWeb.onBiometricUnlocked("
+                                        + JSONObject.quote(biometricRequestId) + ","
+                                        + JSONObject.quote(payload) + ")");
+                            } else {
+                                byte[] encrypted = cipher.doFinal(pendingBiometricPayload.getBytes(StandardCharsets.UTF_8));
+                                String iv = Base64.getEncoder().encodeToString(cipher.getIV());
+                                String data = Base64.getEncoder().encodeToString(encrypted);
+                                boolean stored = getSharedPreferences(BIOMETRIC_PREFS, MODE_PRIVATE).edit()
+                                        .putString("iv", iv).putString("data", data).commit();
+                                if (!stored) throw new IOException("The biometric session could not be saved.");
+                                biometricResult(true, "Fingerprint sign-in is ready on this device.");
+                            }
+                        } catch (Exception exception) {
+                            clearBiometricSession();
+                            biometricResult(false, "Could not unlock this session. Sign in with your password again.");
+                        } finally {
+                            pendingBiometricPayload = "";
+                            biometricUnlock = false;
+                        }
+                    }
+                });
+    }
+
+    private String pendingBiometricPayload = "";
+
+    private void biometricResult(boolean success, String message) {
+        String callback = biometricUnlock ? "onBiometricUnlockResult" : "onBiometricSaved";
+        runInApp("window.BrightPathWeb." + callback + "(" + JSONObject.quote(biometricRequestId) + ","
+                + success + "," + JSONObject.quote(message) + ")");
+        biometricUnlock = false;
+        pendingBiometricPayload = "";
+    }
+
+    private BiometricPrompt.PromptInfo biometricPromptInfo() {
+        return new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("Sign in to BrightPath")
+                .setSubtitle("Use your fingerprint to unlock your saved school session")
+                .setNegativeButtonText("Use password")
+                .build();
+    }
+
+    private void clearBiometricSession() {
+        getSharedPreferences(BIOMETRIC_PREFS, MODE_PRIVATE).edit().clear().apply();
+        try {
+            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
+            keyStore.load(null);
+            if (keyStore.containsAlias(BIOMETRIC_KEY_ALIAS)) keyStore.deleteEntry(BIOMETRIC_KEY_ALIAS);
+        } catch (Exception exception) {
+            android.util.Log.e("BrightPath", "Could not clear the biometric key.", exception);
+        }
+    }
+
     private void scheduleReminder(String title, String message, int minutes) {
         AlarmManager alarms = getSystemService(AlarmManager.class);
         if (alarms == null) {
@@ -202,6 +314,69 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public boolean isNativeApp() {
             return true;
+        }
+
+        @JavascriptInterface
+        public boolean isBiometricAvailable() {
+            return canUseBiometric();
+        }
+
+        @JavascriptInterface
+        public boolean hasBiometricSession() {
+            return !getSharedPreferences(BIOMETRIC_PREFS, MODE_PRIVATE).getString("data", "").isEmpty();
+        }
+
+        @JavascriptInterface
+        public void saveBiometricSession(String token, String userJson, String apiBase, String requestId) {
+            runOnUiThread(() -> {
+                biometricRequestId = requestId;
+                biometricUnlock = false;
+                if (!canUseBiometric()) {
+                    biometricResult(false, "Fingerprint unlock is not available. Use your password instead.");
+                    return;
+                }
+                try {
+                    JSONObject payload = new JSONObject();
+                    payload.put("token", token);
+                    payload.put("user", new JSONObject(userJson));
+                    payload.put("apiBase", apiBase);
+                    pendingBiometricPayload = payload.toString();
+                    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                    cipher.init(Cipher.ENCRYPT_MODE, getBiometricKey());
+                    createBiometricPrompt().authenticate(biometricPromptInfo(),
+                            new BiometricPrompt.CryptoObject(cipher));
+                } catch (Exception exception) {
+                    biometricResult(false, "Could not prepare fingerprint sign-in. Please try again.");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void unlockBiometricSession(String requestId) {
+            runOnUiThread(() -> {
+                biometricRequestId = requestId;
+                biometricUnlock = true;
+                if (!canUseBiometric() || !hasBiometricSession()) {
+                    biometricResult(false, "Fingerprint sign-in is unavailable. Use your school password.");
+                    return;
+                }
+                try {
+                    String encodedIv = getSharedPreferences(BIOMETRIC_PREFS, MODE_PRIVATE).getString("iv", "");
+                    Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                    cipher.init(Cipher.DECRYPT_MODE, getBiometricKey(),
+                            new GCMParameterSpec(128, Base64.getDecoder().decode(encodedIv)));
+                    createBiometricPrompt().authenticate(biometricPromptInfo(),
+                            new BiometricPrompt.CryptoObject(cipher));
+                } catch (Exception exception) {
+                    clearBiometricSession();
+                    biometricResult(false, "Could not unlock this session. Sign in with your password again.");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void clearBiometricSessionFromApp() {
+            clearBiometricSession();
         }
 
         @JavascriptInterface
