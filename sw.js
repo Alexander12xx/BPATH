@@ -1,5 +1,5 @@
-const CACHE_NAME = 'brightpath-v8';
-const APP_FILES = ['./', './index.html', './styles.css', './app.js', './manifest.json', './icon.svg', './site-config.js'];
+const CACHE_NAME = 'brightpath-v11';
+const APP_FILES = ['./', './index.html', './app.html', './styles.css', './download.css', './download.js', './app.js', './manifest.json', './icon.svg', './site-config.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_FILES)));

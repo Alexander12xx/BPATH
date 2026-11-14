@@ -35,24 +35,17 @@ Run the browser preview locally:
 python -m http.server 8000
 ```
 
-Open `http://localhost:8000`. The static web preview remains useful for development, but the Android Studio project is the native Android install.
+Open `http://localhost:8000` for the download/install homepage; choose **Open learning app** to preview the app interface. The Android Studio project builds the native Android install.
 
 To publish the interface on GitHub Pages, push the repository to GitHub and select the default branch and repository root under **Settings → Pages**. On Android, the published page can also be added to the home screen as a PWA. GitHub Pages is static hosting; it cannot run PHP or host the MySQL database.
 
 ## InfinityFree app homepage and Android download
 
-The BrightPath `index.html` can be the public InfinityFree homepage. Upload these root files into `public_html`: `index.html`, `app.js`, `styles.css`, `manifest.json`, `icon.svg`, `sw.js`, and `site-config.js`. Upload the contents of `backend/api` separately into `public_html/api`; do not upload Android build files or private server configuration.
+The BrightPath `index.html` is the public download/install homepage; the app interface is `app.html`. Upload these root files into the domain's document root (InfinityFree commonly names it `htdocs`): `index.html`, `app.html`, `app.js`, `styles.css`, `download.css`, `download.js`, `manifest.json`, `icon.svg`, `sw.js`, and `site-config.js`. Upload the contents of `backend/api` separately into the `api` folder under that same document root; do not upload Android build files or private server configuration to the public repository.
 
-Edit the public `site-config.js` on InfinityFree:
+The checked-in `site-config.js` points the app at `https://brightpath.gt.tc`. If your site uses a different HTTPS domain, edit the public `site-config.js` to match it. Do not put database credentials in this public file.
 
-```js
-window.BRIGHTPATH_CONFIG = Object.freeze({
-  apiBase: window.location.origin,
-  androidDownloadUrl: 'https://github.com/YOUR_ACCOUNT/YOUR_REPOSITORY/releases/latest/download/app-release.apk'
-});
-```
-
-The homepage will show a **Download APK** link when `androidDownloadUrl` points to a published HTTPS GitHub Release asset. Until a signed release exists, keep the link blank or direct it to your actual release page; do not point students at a debug APK for public distribution. Android requires users to approve APK installation from their browser and to allow updates signed with the same private release key. The PWA install button is separate from the direct Android APK download.
+The homepage shows a **Download APK** link only when `androidDownloadUrl` points to an existing HTTPS APK. The GitHub repository currently has no published release, so leave this value blank until a signed APK is published. Do not point students at a debug APK for public distribution. Android requires users to approve APK installation from their browser and to allow updates signed with the same private release key. The PWA install button is separate from the direct Android APK download.
 
 This public file contains only public URLs. **Do not put a MySQL password, API key, bootstrap key, or Android signing secret in `site-config.js`, `app.js`, GitHub Pages, or the APK.** BrightPath does not use a shared frontend API key: the PHP server keeps the MySQL credentials in `backend/api/config.php`, and signed-in accounts receive short-lived bearer tokens.
 
@@ -62,9 +55,9 @@ Keep the API on the PHP host, not in GitHub Pages or the Android source. The bro
 
 1. In InfinityFree, create a MySQL database and user in the hosting control panel. Note the database hostname, name, and username shown there; the database hostname is not necessarily `localhost`.
 2. In phpMyAdmin, select that database and import [`backend/api/schema.sql`](./backend/api/schema.sql).
-3. Copy the contents of `backend/api` to `public_html/api` on the PHP host. Do not copy any student data into GitHub.
-4. On the PHP host, copy `config.example.php` to `config.php`, fill in the InfinityFree database details, and set `allowed_origins` to the exact InfinityFree origin, any GitHub Pages origin you actually use, and `https://appassets.androidplatform.net` for the Android app. Do not add trailing slashes. Generate a one-time bootstrap key on your computer, for example with `python -c "import secrets; print(secrets.token_urlsafe(32))"`, and set it as `bootstrap_key` in the server-only config. Type that key only into the one-time setup form.
-5. In the public InfinityFree `site-config.js`, set `apiBase` to `window.location.origin`. In the Android app, connect using the same HTTPS InfinityFree website origin. Select **Test connection**; a successful response confirms both the PHP API and its MySQL connection.
+3. Copy the contents of `backend/api` into the `api` directory under the same document root as `index.html`. The deployed `index.php` should be reachable at `https://brightpath.gt.tc/api/index.php?r=health`.
+4. On the PHP host, create `api/config.php` **in the same directory as `api/index.php`**. Start from `config.example.php`, fill in the InfinityFree database details, and set `allowed_origins` to the exact InfinityFree origin, the lowercase GitHub Pages origin `https://alexander12xx.github.io` if used, and `https://appassets.androidplatform.net` for the Android app. Do not add trailing slashes. `config.php` must be a PHP file named exactly that (not `config.php.txt`) and must remain server-only; never add it to GitHub or the Android app. Generate a new one-time bootstrap key on your computer, for example with `python -c "import secrets; print(secrets.token_urlsafe(32))"`, and set it in the server-only config.
+5. In `site-config.js`, set `apiBase` to the HTTPS origin of the PHP site. In the Android app, connect using that same origin. Select **Test connection**; success should return JSON with `"database":"connected"`. If the response says API setup is incomplete, `config.php` is missing or is not beside `index.php`.
 6. Use **One-time school administrator setup** once to create the first administrator. Sign in, create school accounts, and share student credentials privately with their parent/guardian. Immediately clear `bootstrap_key` in the server config after setup.
 7. An administrator can create student, parent, and tutor accounts. Tutors can publish assignments for grades 1–8 and review/download work submitted to their own assignments. Student accounts can see published assignments for their grade and submit a JPG, PNG, WebP, or PDF (maximum 8 MB) from the assignment page.
 
@@ -74,6 +67,6 @@ The PHP host must allow HTTPS requests from the exact published GitHub origin an
 
 ## Current scope and safety
 
-The demo dashboards still show sample progress. Parent-child account linking, parent access to private student records, tutor attendance/grading, real video calls, moderated messaging, scheduled server push, and a production signed release process are not implemented. The debug APK has been built, but this workspace has no connected Android device and the PHP/MySQL API has not been tested against an InfinityFree account. Camera capture, file picking, local reminders, API health checking, sign-in, and protected student uploads still need on-device and hosted-server testing.
+The interface does not invent learner or progress records; sections without a database endpoint show an empty state. The API currently provides account sign-in, account creation, assignments, and student submission uploads/review only. Parent-child linking, parent access to student records, tutor attendance/grading, lesson/progress storage, scheduled classes, real video calls, persistent class chat, remote push notifications, and an Android release are not implemented. The API still needs to be configured and tested on the actual InfinityFree account. Camera capture, file picking, and local reminders need on-device testing.
 
 This is a starter integration, not a production-ready service for children. Before inviting real students, add verified guardian consent and family linking, server-side role checks for every record, account recovery and login rate limits, secure tutor/class workflows, upload scanning and retention rules, backups, audit/incident procedures, and privacy/safeguarding review for your region. Keep third-party recommendations clearly labeled, age-appropriate, and free from behavioral targeting.

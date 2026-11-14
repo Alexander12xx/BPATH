@@ -29,39 +29,28 @@ function icon(name, className = '') {
 
 const roles = {
   student: {
-    name: 'Alex Morgan', initial: 'A', title: 'My learning', greeting: 'Good morning',
-    links: [['home', 'home', 'My learning'], ['subjects', 'book', 'My subjects'], ['classes', 'clock', 'Live classes', '2'], ['assignments', 'check', 'Assignments', '3'], ['progress', 'chart', 'My progress']]
+    name: 'Student', initial: 'S', title: 'My learning', greeting: 'Welcome',
+    links: [['home', 'home', 'My learning'], ['subjects', 'book', 'My subjects'], ['classes', 'clock', 'Live classes'], ['assignments', 'check', 'Assignments'], ['progress', 'chart', 'My progress']]
   },
   parent: {
-    name: 'Jamie Morgan', initial: 'J', title: 'Family overview', greeting: 'Welcome back',
-    links: [['home', 'home', 'Overview'], ['children', 'people', 'My children'], ['progress', 'chart', 'Learning progress'], ['classes', 'clock', 'Classes & schedule'], ['messages', 'message', 'Messages', '2']]
+    name: 'Parent', initial: 'P', title: 'Family overview', greeting: 'Welcome',
+    links: [['home', 'home', 'Overview'], ['children', 'people', 'My children'], ['progress', 'chart', 'Learning progress'], ['classes', 'clock', 'Classes & schedule'], ['messages', 'message', 'Messages']]
   },
   tutor: {
-    name: 'Taylor Reed', initial: 'T', title: 'Tutor workspace', greeting: 'Good morning',
-    links: [['home', 'home', 'Overview'], ['classes', 'clock', 'My classes', '3'], ['students', 'people', 'My students'], ['assignments', 'check', 'Assignments'], ['messages', 'message', 'Messages', '4']]
+    name: 'Tutor', initial: 'T', title: 'Tutor workspace', greeting: 'Welcome',
+    links: [['home', 'home', 'Overview'], ['classes', 'clock', 'My classes'], ['students', 'people', 'My students'], ['assignments', 'check', 'Assignments'], ['messages', 'message', 'Messages']]
   },
   developer: {
-    name: 'Platform admin', initial: 'D', title: 'Developer console', greeting: 'Welcome',
+    name: 'Administrator', initial: 'A', title: 'Developer console', greeting: 'Welcome',
     links: [['home', 'home', 'Overview'], ['users', 'people', 'Users & roles'], ['content', 'book', 'Learning content'], ['health', 'chart', 'System health'], ['settings', 'settings', 'Settings']]
   }
 };
-
-const lessons = [
-  { id: 'fractions', title: 'Fractions made friendly', subject: 'Mathematics', icon: '½', art: 'art-math', progress: 68, color: '' },
-  { id: 'plants', title: 'How plants grow', subject: 'Science', icon: 'leaf', art: 'art-science', progress: 35, color: 'green' },
-  { id: 'reading', title: 'The secret garden', subject: 'Reading', icon: 'openBook', art: 'art-reading', progress: 82, color: 'orange' }
-];
-const assignments = [
-  { id: 'math-practice', title: 'Fraction practice', detail: 'Mathematics · Due today', tag: 'TODAY', due: true, done: false },
-  { id: 'science-journal', title: 'My plant journal', detail: 'Science · Due Friday', tag: 'IN 3 DAYS', due: false, done: false },
-  { id: 'reading-reflection', title: 'Reading reflection', detail: 'Reading · Completed', tag: 'DONE', due: false, done: true }
-];
-const saved = readState();
 const apiSettings = readApiSettings();
+const initialApiUser = readApiUser();
 const state = {
-  role: 'student', page: 'home', completed: new Set(saved.completed || []),
-  assignmentDone: new Set(saved.assignmentDone || []), toastTimer: null, chat: [],
-  apiBase: apiSettings.base || window.BRIGHTPATH_CONFIG?.apiBase || '', apiStatus: '', apiUser: readApiUser(),
+  role: initialApiUser?.role === 'admin' ? 'developer' : initialApiUser?.role || 'student',
+  page: 'home', toastTimer: null,
+  apiBase: apiSettings.base || window.BRIGHTPATH_CONFIG?.apiBase || '', apiStatus: '', apiUser: initialApiUser,
   androidDownloadUrl: window.BRIGHTPATH_CONFIG?.androidDownloadUrl || '',
   selectedFiles: new Map(), remoteAssignments: [], remoteAssignmentsLoaded: false,
   remoteTutorAssignments: [], remoteSubmissions: [], remoteTutorDataLoaded: false
@@ -71,15 +60,10 @@ const sideNav = document.querySelector('#side-nav');
 const mobileNav = document.querySelector('#mobile-nav');
 const roleSelect = document.querySelector('#role-select');
 
-function readState() {
-  try { return JSON.parse(localStorage.getItem('brightpath-demo') || '{}'); }
-  catch { return {}; }
-}
-
 function tutorSubmissionsPanel() {
   const canReview = state.apiUser && ['tutor', 'admin'].includes(state.apiUser.role);
   if (!canReview) {
-    return `<section class="panel"><div class="panel-heading"><div><h2>Student work to review</h2><p>Sign in above with your tutor account to see real submissions.</p></div><span class="demo-badge">SCHOOL API</span></div><div class="empty-state">${icon('book')}Sample review counts are shown until your school API is connected.</div></section>`;
+    return '';
   }
   const items = state.remoteSubmissions;
   return `<section class="panel"><div class="panel-heading"><div><h2>Student work to review</h2><p>Only submissions on your assignments are listed.</p></div><span class="task-tag">${items.length} NEW</span></div>${items.length ? `<div class="submission-list">${items.map(item => `<article class="submission-item"><div class="avatar avatar-purple">${escapeHTML((item.student_name || 'S')[0])}</div><div class="submission-copy"><strong>${escapeHTML(item.student_name)} · Grade ${escapeHTML(String(item.grade))}</strong><span>${escapeHTML(item.title)} · ${new Date(item.submitted_at).toLocaleDateString()}</span>${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}<span>${escapeHTML(item.original_filename)} · ${(Number(item.file_size) / (1024 * 1024)).toFixed(2)} MB</span></div><button class="round-arrow" aria-label="Download ${escapeHTML(item.original_filename)}" data-action="download-submission" data-submission-id="${Number(item.id)}">↓</button></article>`).join('')}</div>` : '<div class="empty-state"><span>✓</span>No student work is waiting for review.</div>'}</section>`;
@@ -98,12 +82,6 @@ function readApiSettings() {
 function readApiUser() {
   try { return JSON.parse(sessionStorage.getItem('brightpath-user') || 'null'); }
   catch { return null; }
-}
-
-function saveState() {
-  localStorage.setItem('brightpath-demo', JSON.stringify({
-    completed: [...state.completed], assignmentDone: [...state.assignmentDone]
-  }));
 }
 
 function apiToken() {
@@ -170,8 +148,9 @@ function header() {
   const user = roles[state.role];
   document.querySelector('#greeting').textContent = user.greeting;
   document.querySelector('#page-title').textContent = pageTitle();
-  document.querySelector('#header-avatar').textContent = user.initial;
-  document.querySelector('#header-name').textContent = user.name;
+  const displayName = state.apiUser?.name || (state.role === 'developer' ? 'Administrator setup' : 'Not signed in');
+  document.querySelector('#header-avatar').textContent = displayName[0].toUpperCase();
+  document.querySelector('#header-name').textContent = displayName;
   document.querySelector('#header-avatar').className = `avatar ${state.role === 'parent' ? 'avatar-orange' : state.role === 'tutor' ? 'avatar-mint' : state.role === 'developer' ? 'avatar-blue' : 'avatar-purple'}`;
 }
 
@@ -323,17 +302,19 @@ function assignmentPage() {
 
 function apiConnectionPanel() {
   const connected = Boolean(apiToken() && state.apiUser);
+  const canConfigureApi = state.role === 'developer';
   return `<section class="panel api-panel"><div class="panel-heading"><div><h2>School connection</h2><p>Connect BrightPath to your school’s secure InfinityFree API.</p></div><span class="demo-badge">${connected ? 'SIGNED IN' : 'SETUP'}</span></div>
-    <label class="form-label" for="api-base-input">API website address</label>
-    <div class="api-url-row"><input id="api-base-input" type="url" inputmode="url" placeholder="https://your-site.infinityfreeapp.com" value="${escapeHTML(state.apiBase)}" autocomplete="url"><button class="secondary-button" data-action="test-api">Test connection</button></div>
-    <p class="form-hint">Enter your InfinityFree site address, not your MySQL hostname. Use HTTPS.</p>
-    <div class="api-status ${state.apiStatus.startsWith('Connected') ? 'success' : state.apiStatus ? 'error' : ''}" id="api-status" role="status">${escapeHTML(state.apiStatus || 'Not connected. Your school administrator can provide this address.')}</div>
+    ${canConfigureApi ? `<label class="form-label" for="api-base-input">Developer API test override</label>
+      <div class="api-url-row"><input id="api-base-input" type="url" inputmode="url" placeholder="https://your-school-site.example" value="${escapeHTML(state.apiBase)}" autocomplete="url"><button class="secondary-button" data-action="test-api">Test connection</button></div>
+      <p class="form-hint">This override is saved on this device only. For all users, set the public API origin in site-config.js. Database credentials stay on the PHP server.</p>`
+      : `<p class="form-hint">School API: ${escapeHTML(state.apiBase || 'Not configured. Ask your developer.')}</p><button class="secondary-button" data-action="test-api">Check school connection</button>`}
+    <div class="api-status ${state.apiStatus.startsWith('Connected') ? 'success' : state.apiStatus ? 'error' : ''}" id="api-status" role="status">${escapeHTML(state.apiStatus || 'Connection has not been tested on this device.')}</div>
     ${connected ? `<div class="signed-in-row"><span>Signed in as <strong>${escapeHTML(state.apiUser.name || state.apiUser.email)}</strong></span><button class="text-button" data-action="api-signout">Sign out</button></div>` : `<form class="api-login-form" id="api-login-form"><h3>School account sign in</h3><div class="login-fields"><label class="form-label">School email<input name="email" type="email" autocomplete="username" required maxlength="190" placeholder="you@school.example"></label><label class="form-label">Password<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128" placeholder="Your school password"></label></div><button class="primary-button" type="submit">Sign in securely</button><p class="form-hint">Your sign-in token stays in this app session and is not included in GitHub.</p></form>`}
     ${!connected && state.role === 'developer' ? `<form class="api-login-form" id="api-bootstrap-form"><h3>One-time school administrator setup</h3><p class="form-hint">Use only once after importing the database. Keep the setup key private, then remove it from the server configuration.</p><div class="login-fields"><label class="form-label">Administrator name<input name="name" required maxlength="120" autocomplete="name"></label><label class="form-label">Administrator email<input name="email" type="email" required maxlength="190" autocomplete="email"></label><label class="form-label">Strong password<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label><label class="form-label">One-time setup key<input name="bootstrap_key" type="password" required autocomplete="off"></label></div><button class="primary-button" type="submit">Create first administrator</button></form>` : ''}
     ${connected && state.apiUser.role === 'admin' ? `<form class="api-login-form" id="api-create-user-form"><h3>Create a school account</h3><div class="login-fields"><label class="form-label">Full name<input name="name" required maxlength="120" autocomplete="name"></label><label class="form-label">Email<input name="email" type="email" required maxlength="190" autocomplete="email"></label><label class="form-label">Role<select name="role" required><option value="student">Student</option><option value="parent">Parent</option><option value="tutor">Tutor</option></select></label><label class="form-label" id="new-user-grade-label">Student grade<select name="grade" required>${Array.from({ length: 8 }, (_, i) => `<option value="${i + 1}">Grade ${i + 1}</option>`).join('')}</select></label><label class="form-label">Temporary password<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label></div><button class="primary-button" type="submit">Create account</button><p class="form-hint">Share temporary credentials privately with a parent or guardian. A parent-student link must be verified before enabling family records.</p></form>` : ''}
     ${connected && ['tutor', 'admin'].includes(state.apiUser.role) ? `<form class="api-login-form" id="api-create-assignment-form"><h3>Publish an assignment</h3><div class="login-fields"><label class="form-label">Assignment title<input name="title" required maxlength="180"></label><label class="form-label">Grade<select name="grade" required>${Array.from({ length: 8 }, (_, i) => `<option value="${i + 1}">Grade ${i + 1}</option>`).join('')}</select></label><label class="form-label wide-field">Instructions<textarea name="description" rows="2" maxlength="5000" placeholder="What should learners do?"></textarea></label><label class="form-label">Due date<input name="due_at" type="date"></label></div><button class="primary-button" type="submit">Publish assignment</button></form>` : ''}
     ${window.BrightPathNative ? '<button class="secondary-button reminder-test" data-action="schedule-reminder">Try a 1-minute notification</button>' : ''}
-    <div class="callout api-safety">For student privacy, the database password stays on InfinityFree’s PHP server—never enter it here. Ask an adult to configure the server and provide an account.</div>
+    <div class="callout api-safety">For student privacy, database credentials and setup keys stay on the server and must never be entered in this app.</div>
   </section>`;
 }
 
@@ -388,9 +369,120 @@ function developerPage() {
   return `${welcome(titles[state.page], text[state.page])}<div class="page-section"><div class="developer-banner"><h2>${titles[state.page]} <span class="demo-badge">DEMO CONSOLE</span></h2><p>Changes here are not connected to user accounts or production services.</p></div><section class="panel"><div class="panel-heading"><div><h2>${state.page === 'users' ? 'Sample accounts' : state.page === 'content' ? 'Sample content library' : state.page === 'health' ? 'Service checklist' : 'Launch checklist'}</h2><p>Example entries for the developer workspace.</p></div><button class="text-button" data-action="family-info">+ Add item</button></div><div class="table-wrap"><table class="simple-table"><thead><tr><th>AREA</th><th>DETAIL</th><th>STATUS</th></tr></thead><tbody>${(state.page === 'users' ? [['Student', 'Grade 5 learner profile', 'Sample'], ['Parent', 'Guardian dashboard', 'Sample'], ['Tutor', 'Classroom instructor', 'Sample']] : state.page === 'content' ? [['Mathematics', 'Fractions · Grade 5', 'Draft'], ['Science', 'Plant life · Grade 5', 'Draft'], ['Reading', 'Story collection · Grade 5', 'Review']] : [['Authentication', 'Secure sign-in and role checks', 'Not connected'], ['Database', 'Protected student records', 'Not connected'], ['Video & messaging', 'Live classroom provider', 'Not connected']]).map(row => `<tr><td>${row[0]}</td><td>${row[1]}</td><td><span class="task-tag due">${row[2]}</span></td></tr>`).join('')}</tbody></table></div></section></div>`;
 }
 
+function emptyPanel(title, message) {
+  return `<section class="panel"><div class="panel-heading"><div><h2>${escapeHTML(title)}</h2></div></div><div class="empty-state">${icon('book')}${escapeHTML(message)}</div></section>`;
+}
+
+function studentHome() {
+  const name = escapeHTML(state.apiUser?.name || 'Learner');
+  const content = !state.apiUser
+  ? apiConnectionPanel()
+  : !state.remoteAssignmentsLoaded
+    ? emptyPanel('Assignments', 'Loading assignments from your school…')
+    : state.remoteAssignments.length
+      ? `<section class="panel"><div class="panel-heading"><div><h2>Your assignments</h2><p>Published by your school for your grade.</p></div></div>${state.remoteAssignments.map(remoteAssignmentCard).join('')}</section>`
+      : emptyPanel('Assignments', 'Your school has not published an assignment for your grade yet.');
+  return `${welcome(`Welcome, ${name}`, 'Your learning activity will appear here when your school publishes it.')}
+  <div class="page-section">${content}${emptyPanel('Lessons', 'No lessons have been published to your account yet.')}${emptyPanel('Live classes', 'No live classes are scheduled for your account.')}</div>`;
+}
+
+function parentHome() {
+  const content = !state.apiUser
+  ? apiConnectionPanel()
+  : emptyPanel('Linked learners', 'No learner accounts are linked to this parent account yet.');
+  return `${welcome('Family overview', 'See learning activity for accounts securely linked to your family.')}
+  <div class="page-section">${content}${emptyPanel('Recent activity', 'Activity will appear here after family linking and progress reporting are configured.')}</div>`;
+}
+
+function tutorHome() {
+  if (!state.apiUser) {
+  return `${welcome('Tutor workspace', 'Sign in with your school account to manage your assignments.')}<div class="page-section">${apiConnectionPanel()}</div>`;
+  }
+  if (!state.remoteTutorDataLoaded) {
+  return `${welcome('Tutor workspace', 'Loading your school records.')}<div class="page-section">${emptyPanel('Tutor data', 'Loading assignments and submissions…')}</div>`;
+  }
+  return `${welcome(`Welcome, ${escapeHTML(state.apiUser.name || 'Tutor')}`, 'Your published assignments and student submissions from the school database.')}
+  <div class="page-section">${apiConnectionPanel()}${tutorSubmissionsPanel()}${tutorAssignmentsPanel()}</div>`;
+}
+
+function developerHome() {
+  return `${welcome('Developer workspace', 'Configure the school connection and manage real school records.')}
+  <div class="page-section">${apiConnectionPanel()}${emptyPanel('Platform services', 'Class scheduling, live video, class chat, family linking, and lesson management are not connected to the school database yet.')}</div>`;
+}
+
+function fullPage() {
+  if (state.page === 'home') {
+  if (state.role === 'parent') return parentHome();
+  if (state.role === 'tutor') return tutorHome();
+  if (state.role === 'developer') return developerHome();
+  return studentHome();
+  }
+  if (state.page === 'subjects') return emptyPanel('Lessons', 'No lessons have been published to your account yet.');
+  if (state.page === 'classes') return classPage();
+  if (state.page === 'assignments') return assignmentPage();
+  if (state.page === 'progress') return progressPage();
+  if (state.page === 'children') return parentChildrenPage();
+  if (state.page === 'students') return tutorStudentsPage();
+  if (state.page === 'messages') return messagePage();
+  if (['users', 'content', 'health', 'settings'].includes(state.page)) return developerPage();
+  return emptyPanel(pageTitle(), 'There is no school data available for this section yet.');
+}
+
+function classPage() {
+  return `${welcome('Live classes', 'Scheduled classes from your school will appear here.')}
+  <div class="page-section">${!state.apiUser ? apiConnectionPanel() : emptyPanel('No scheduled classes', 'Your school has not scheduled a class for your account. Live video and class chat require a school-configured Jitsi server.')}</div>`;
+}
+
+function assignmentPage() {
+  const isSchoolStaff = ['tutor', 'admin'].includes(state.apiUser?.role);
+  const content = !state.apiUser
+  ? apiConnectionPanel()
+  : !state.remoteAssignmentsLoaded
+    ? emptyPanel('Assignments', 'Loading assignments from your school…')
+    : state.remoteAssignments.length
+      ? `<section class="panel"><div class="panel-heading"><div><h2>${isSchoolStaff ? 'School assignments' : 'Your assignments'}</h2><p>Current records loaded from the school database.</p></div></div>${state.remoteAssignments.map(remoteAssignmentCard).join('')}</section>`
+      : emptyPanel('No assignments', 'There are no current assignments for this account.');
+  return `${welcome('Assignments', 'Assignments and submissions are loaded from your school account.')}
+  <div class="page-section">${isSchoolStaff ? apiConnectionPanel() : ''}${content}</div>`;
+}
+
+function progressPage() {
+  return `${welcome('Learning progress', 'Progress reports are based on activity recorded by your school.')}
+  <div class="page-section">${!state.apiUser ? apiConnectionPanel() : emptyPanel('No progress records', 'No learning activity has been recorded for this account yet.')}</div>`;
+}
+
+function parentChildrenPage() {
+  return `${welcome('Linked learners', 'Only learners linked to your verified parent account can appear here.')}
+  <div class="page-section">${!state.apiUser ? apiConnectionPanel() : emptyPanel('No linked learners', 'There are no learner accounts linked to this parent account.')}</div>`;
+}
+
+function tutorStudentsPage() {
+  return `${welcome('My learners', 'Your school roster will appear here when learner assignments are configured.')}
+  <div class="page-section">${!state.apiUser ? apiConnectionPanel() : emptyPanel('No learner roster', 'No learner records are available to this tutor account.')}</div>`;
+}
+
+function messagePage() {
+  return `${welcome('Messages', 'Class conversations are available only in scheduled school classrooms.')}
+  <div class="page-section">${!state.apiUser ? apiConnectionPanel() : emptyPanel('No conversations', 'No classroom conversations are available for this account yet.')}</div>`;
+}
+
+function developerPage() {
+  const titles = { users: 'Users & roles', content: 'Learning content', health: 'System health', settings: 'Platform settings' };
+  if (state.page === 'settings' || state.page === 'health' || state.page === 'users') {
+  return `${welcome(titles[state.page], 'Developer-only controls and live school API status.')}
+    <div class="page-section">${apiConnectionPanel()}${state.page === 'users' && state.apiUser?.role === 'admin'
+      ? emptyPanel('School accounts', 'Use the account form above to create database-backed accounts. The API does not yet provide account listing or editing.')
+      : ''}</div>`;
+  }
+  return `${welcome(titles.content, 'Published learning material for students will be managed here.')}
+  <div class="page-section">${!state.apiUser ? apiConnectionPanel() : emptyPanel('No learning content', 'No learning content is available from the school database yet.')}</div>`;
+}
+
 function render() {
   navMarkup();
   header();
+  roleSelect.value = state.role;
+  roleSelect.disabled = Boolean(state.apiUser);
   pageContent.innerHTML = fullPage();
   filterSearch(document.querySelector('#search-input').value);
   if (state.apiUser?.role === 'admin') {
@@ -401,7 +493,7 @@ function render() {
       gradeLabel.querySelector('select').required = roleInput.value === 'student';
     }
   }
-  if (state.page === 'assignments' && state.role === 'student' && apiToken()
+  if (['home', 'assignments'].includes(state.page) && state.role === 'student' && apiToken()
       && !state.remoteAssignmentsLoaded) loadRemoteAssignments();
   if (state.page === 'home' && state.role === 'tutor' && apiToken()
       && ['tutor', 'admin'].includes(state.apiUser?.role) && !state.remoteTutorDataLoaded) loadTutorData();
@@ -427,12 +519,15 @@ function showLesson(id) {
 }
 
 function showRolePicker() {
-  const options = Object.entries(roles).map(([id, role]) => `
+  const entries = state.apiUser
+    ? Object.entries(roles).filter(([id]) => id === (state.apiUser.role === 'admin' ? 'developer' : state.apiUser.role))
+    : Object.entries(roles);
+  const options = entries.map(([id, role]) => `
     <button class="search-result" data-role="${id}" ${state.role === id ? 'aria-current="true"' : ''}>
-      <strong>${role.name}${state.role === id ? ' · Current dashboard' : ''}</strong>
+      <strong>${role.name}${state.role === id ? ' · Current workspace' : ''}</strong>
       <span>${role.title}</span>
     </button>`).join('');
-  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-close-modal><section class="modal" role="dialog" aria-modal="true" aria-labelledby="role-title"><div class="modal-top"><div><span class="eyebrow">BRIGHTPATH</span><h2 id="role-title">Choose a dashboard</h2></div><button class="modal-close" data-close-modal aria-label="Close">×</button></div><p>Switch between the student, parent, tutor, and developer demo views.</p><div class="search-results">${options}</div></section></div>`;
+  document.querySelector('#modal-root').innerHTML = `<div class="modal-backdrop" data-close-modal><section class="modal" role="dialog" aria-modal="true" aria-labelledby="role-title"><div class="modal-top"><div><span class="eyebrow">BRIGHTPATH</span><h2 id="role-title">Choose a workspace</h2></div><button class="modal-close" data-close-modal aria-label="Close">×</button></div><p>Sign in with the account for the workspace you need.</p><div class="search-results">${options}</div></section></div>`;
 }
 
 function joinClass() {
@@ -505,7 +600,8 @@ async function loadRemoteAssignments() {
 async function testApiConnection() {
   const input = document.querySelector('#api-base-input');
   try {
-    saveApiBase(input.value);
+    if (input) saveApiBase(input.value);
+    if (!state.apiBase) throw new Error('The school API has not been configured by the developer.');
     setApiStatus('Checking the API and database connection…');
     const result = await apiRequest('health');
     if (result.database !== 'connected') throw new Error('The API is online, but its MySQL database is not connected.');
@@ -521,7 +617,8 @@ async function signInToApi(form) {
   submit.disabled = true;
   try {
     const input = document.querySelector('#api-base-input');
-    saveApiBase(input.value);
+    if (input && state.role === 'developer') saveApiBase(input.value);
+    if (!state.apiBase) throw new Error('The school API has not been configured by the developer.');
     setApiStatus('Signing in securely…');
     const result = await apiRequest('auth/login', {
       method: 'POST',
@@ -538,6 +635,7 @@ async function signInToApi(form) {
     state.role = result.user.role === 'admin' ? 'developer' : result.user.role;
     state.page = 'home';
     roleSelect.value = state.role;
+    roleSelect.disabled = true;
     state.remoteAssignments = [];
     if (result.user.role === 'student') {
       state.remoteAssignmentsLoaded = true;
@@ -574,6 +672,10 @@ document.addEventListener('click', event => {
     state.page = target.dataset.page;
     render();
   } else if (target.dataset.role) {
+    if (state.apiUser && target.dataset.role !== (state.apiUser.role === 'admin' ? 'developer' : state.apiUser.role)) {
+      toast('Your signed-in account does not have access to that workspace.');
+      return;
+    }
     state.role = target.dataset.role;
     state.page = 'home';
     roleSelect.value = state.role;
@@ -644,7 +746,9 @@ async function bootstrapSchoolAdmin(form) {
   const submit = form.querySelector('[type="submit"]');
   submit.disabled = true;
   try {
-    saveApiBase(document.querySelector('#api-base-input').value);
+    const input = document.querySelector('#api-base-input');
+    if (input) saveApiBase(input.value);
+    if (!state.apiBase) throw new Error('The school API has not been configured by the developer.');
     setApiStatus('Creating the one-time administrator account…');
     await apiRequest('auth/bootstrap', {
       method: 'POST',
@@ -760,6 +864,7 @@ async function signOutApi() {
     sessionStorage.removeItem('brightpath-token');
     sessionStorage.removeItem('brightpath-user');
     state.apiUser = null;
+    roleSelect.disabled = false;
     state.remoteAssignments = [];
     state.remoteAssignmentsLoaded = false;
     render();
@@ -863,6 +968,11 @@ document.addEventListener('change', event => {
 });
 
 roleSelect.addEventListener('change', () => {
+  if (state.apiUser) {
+    roleSelect.value = state.apiUser.role === 'admin' ? 'developer' : state.apiUser.role;
+    toast('Your workspace is set by your signed-in school account.');
+    return;
+  }
   state.role = roleSelect.value;
   state.page = 'home';
   document.querySelector('#search-input').value = '';
