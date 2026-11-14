@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f8fc">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="description" content="BrightPath makes learning feel like an adventure for grades 1–8.">
+    <title>BrightPath Learning App</title>
+    <link rel="manifest" href="./manifest.json">
+    <link rel="icon" href="./icon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="./styles.css">
+    <script src="./site-config.js" defer></script>
+  </head>
+  <body>
+    <aside class="android-install-banner" id="android-install-banner" hidden aria-label="Android app download">
+      <div class="android-install-copy">
+        <span class="android-install-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M7 8.5 5.7 6.3M17 8.5l1.3-2.2M5.5 10.5h13v7a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-7Zm3.2-2a3.3 3.3 0 0 1 6.6 0M8.5 13v2m7-2v2"/></svg>
+        </span>
+        <span><strong>BrightPath for Android</strong><small>Get the learning app on your phone.</small></span>
+      </div>
+      <a id="android-download-link" class="android-download-link" href="#" hidden>Download APK</a>
+    </aside>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="brand" href="#" aria-label="BrightPath home">
+          <span class="brand-mark" aria-hidden="true">b</span>
+          <span>bright<span class="brand-accent">path</span><small>LEARNING, YOUR WAY</small></span>
+        </a>
+        <div class="profile-switch">
+          <label for="role-select">VIEW DASHBOARD</label>
+          <select id="role-select" aria-label="Choose dashboard">
+            <option value="student">Student</option>
+            <option value="parent">Parent</option>
+            <option value="tutor">Tutor</option>
+            <option value="developer">Developer</option>
+          </select>
+        </div>
+        <nav id="side-nav" class="nav-list"></nav>
+        <div class="sidebar-note">
+          <span class="note-icon" aria-hidden="true">✦</span>
+          <strong>A little progress<br>goes a long way.</strong>
+          <span>Keep showing up. You’re doing great.</span>
+        </div>
+        <div class="sidebar-footer"><span class="online-dot"></span> Your learning space is ready</div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <button class="mobile-brand" id="mobile-home" aria-label="Go to dashboard"><span class="brand-mark">b</span> brightpath</button>
+          <div class="breadcrumb"><span id="greeting">Good morning</span><span class="breadcrumb-dot">/</span><strong id="page-title">My learning</strong></div>
+          <div class="topbar-actions">
+            <label class="search-box" aria-label="Search lessons and activities">
+              <span aria-hidden="true">⌕</span>
+              <input id="search-input" type="search" placeholder="Search anything..." autocomplete="off">
+              <kbd>/</kbd>
+            </label>
+            <button class="icon-button" id="install-button" aria-label="Install BrightPath" title="Install BrightPath" hidden>⇩</button>
+            <button class="icon-button notification-button" id="notification-button" aria-label="Turn on notifications" title="Turn on notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4"/></svg><span class="notification-dot"></span></button>
+            <button class="user-chip" id="profile-button" aria-label="Current profile"><span class="avatar avatar-purple" id="header-avatar">A</span><span class="user-chip-name" id="header-name">Alex Morgan</span><span class="chevron">⌄</span></button>
+          </div>
+        </header>
+        <section id="page-content" class="page-content" aria-live="polite"></section>
+        <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation"></nav>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="modal-root"></div>
+    <script src="./app.js" defer></script>
+  </body>
+</html>
