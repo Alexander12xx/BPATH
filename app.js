@@ -59,6 +59,39 @@ const pageContent = document.querySelector('#page-content');
 const sideNav = document.querySelector('#side-nav');
 const mobileNav = document.querySelector('#mobile-nav');
 const roleSelect = document.querySelector('#role-select');
+window.BrightPathWeb = {
+  onBiometricSaved(requestId, success, message) {
+    setApiStatus(message, success ? 'success' : 'error');
+    render();
+  },
+  onBiometricUnlockResult(requestId, success, message) {
+    if (!success) {
+      setApiStatus(message, 'error');
+      render();
+    }
+  },
+  onBiometricUnlocked(requestId, serializedSession) {
+    try {
+      const session = JSON.parse(serializedSession);
+      if (!session.token || !session.user || !session.apiBase) throw new Error('Saved sign-in is incomplete.');
+      saveApiBase(session.apiBase);
+      sessionStorage.setItem('brightpath-token', session.token);
+      sessionStorage.setItem('brightpath-user', JSON.stringify(session.user));
+      state.apiUser = session.user;
+      state.role = session.user.role === 'admin' ? 'developer' : session.user.role;
+      state.page = 'home';
+      state.remoteAssignments = [];
+      state.remoteAssignmentsLoaded = false;
+      state.remoteTutorDataLoaded = false;
+      render();
+      toast('Welcome back! Your school session is unlocked.');
+    } catch (error) {
+      window.BrightPathNative?.clearBiometricSessionFromApp?.();
+      setApiStatus('Fingerprint sign-in could not be restored. Use your school password.', 'error');
+      render();
+    }
+  }
+};
 
 function tutorSubmissionsPanel() {
   const canReview = state.apiUser && ['tutor', 'admin'].includes(state.apiUser.role);
@@ -66,7 +99,15 @@ function tutorSubmissionsPanel() {
     return '';
   }
   const items = state.remoteSubmissions;
-  return `<section class="panel"><div class="panel-heading"><div><h2>Student work to review</h2><p>Only submissions on your assignments are listed.</p></div><span class="task-tag">${items.length} NEW</span></div>${items.length ? `<div class="submission-list">${items.map(item => `<article class="submission-item"><div class="avatar avatar-purple">${escapeHTML((item.student_name || 'S')[0])}</div><div class="submission-copy"><strong>${escapeHTML(item.student_name)} · Grade ${escapeHTML(String(item.grade))}</strong><span>${escapeHTML(item.title)} · ${new Date(item.submitted_at).toLocaleDateString()}</span>${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}<span>${escapeHTML(item.original_filename)} · ${(Number(item.file_size) / (1024 * 1024)).toFixed(2)} MB</span></div><button class="round-arrow" aria-label="Download ${escapeHTML(item.original_filename)}" data-action="download-submission" data-submission-id="${Number(item.id)}">↓</button></article>`).join('')}</div>` : '<div class="empty-state"><span>✓</span>No student work is waiting for review.</div>'}</section>`;
+  return `<section class="panel"><div class="panel-heading"><div><h2>Student work to review</h2><p>Only submissions on your assignments are listed.</p></div><span class="task-tag">${items.length} NEW</span></div>${items.length ? `<div class="submission-list">${items.map(item => {
+    const isAnswer = item.submission_type === 'answer';
+    let response = item.answer_text || '';
+    if (item.assignment_type === 'choice') {
+      try { response = JSON.parse(item.choices_json || '[]')[Number(item.selected_choice)] || 'Answer unavailable'; }
+      catch { response = 'Answer unavailable'; }
+    }
+    return `<article class="submission-item"><div class="avatar avatar-purple">${escapeHTML((item.student_name || 'S')[0])}</div><div class="submission-copy"><strong>${escapeHTML(item.student_name)} · Grade ${escapeHTML(String(item.grade))}</strong><span>${escapeHTML(item.title)} · ${new Date(item.submitted_at).toLocaleDateString()}</span>${isAnswer ? `<p>${escapeHTML(response)}</p><span>${item.assignment_type === 'choice' ? Number(item.is_correct) === 1 ? 'Auto-marked correct' : 'Auto-marked incorrect' : 'Written answer · needs tutor review'}</span>` : `${item.notes ? `<p>${escapeHTML(item.notes)}</p>` : ''}<span>${escapeHTML(item.original_filename)} · ${(Number(item.file_size) / (1024 * 1024)).toFixed(2)} MB</span>`}</div>${!isAnswer ? `<button class="round-arrow" aria-label="Download ${escapeHTML(item.original_filename)}" data-action="download-submission" data-submission-id="${Number(item.id)}">↓</button>` : ''}</article>`;
+  }).join('')}</div>` : '<div class="empty-state"><span>✓</span>No student work is waiting for review.</div>'}</section>`;
 }
 
 function tutorAssignmentsPanel() {
@@ -104,6 +145,13 @@ async function loadTutorData(renderAfter = true) {
     state.remoteSubmissions = Array.isArray(submissionsResponse.submissions) ? submissionsResponse.submissions : [];
   } catch (error) {
     setApiStatus(`Tutor work could not load: ${error.message}`, 'error');
+    if (error.message.includes('session expired') || error.message.includes('Sign in')) {
+      sessionStorage.removeItem('brightpath-token');
+      sessionStorage.removeItem('brightpath-user');
+      window.BrightPathNative?.clearBiometricSessionFromApp?.();
+      state.apiUser = null;
+      roleSelect.disabled = false;
+    }
     if (renderAfter) render();
     return false;
   }
@@ -148,9 +196,13 @@ function header() {
   const user = roles[state.role];
   document.querySelector('#greeting').textContent = user.greeting;
   document.querySelector('#page-title').textContent = pageTitle();
-  const displayName = state.apiUser?.name || (state.role === 'developer' ? 'Administrator setup' : 'Not signed in');
+  const displayName = state.apiUser?.name || (state.role === 'developer' ? 'Administrator setup' : state.role === 'student' ? 'Student' : `${roles[state.role].name} sign-in`);
   document.querySelector('#header-avatar').textContent = displayName[0].toUpperCase();
   document.querySelector('#header-name').textContent = displayName;
+  document.querySelector('#profile-button').setAttribute(
+    'aria-label',
+    state.apiUser ? `Signed in as ${displayName}. Change workspace` : `${roles[state.role].name} sign-in. Change workspace`
+  );
   document.querySelector('#header-avatar').className = `avatar ${state.role === 'parent' ? 'avatar-orange' : state.role === 'tutor' ? 'avatar-mint' : state.role === 'developer' ? 'avatar-blue' : 'avatar-purple'}`;
 }
 
@@ -272,7 +324,7 @@ function fullPage() {
     if (state.role === 'developer') return developerHome();
     return studentHome();
   }
-  if (state.role === 'student' && state.page === 'subjects') return `${welcome('Explore your subjects', 'Pick a path, find your next favorite thing, and learn at your own pace.')}<div class="page-section"><div class="stats-grid">${stat('My subjects', '4', 'A world of things to explore', 'book', 'purple')}${stat('Lessons in progress', `${lessons.length - state.completed.size}`, 'Pick up right where you left off', 'clock', 'mint')}${stat('Completed', `${state.completed.size}`, 'Every bit of progress counts', 'check', 'peach')}</div><section class="panel"><div class="panel-heading"><div><h2>Your learning path</h2><p>Made for curious minds in Grade 5.</p></div></div>${lessonRows()}</section><div class="callout">Learning should feel encouraging, not stressful. You can revisit a lesson whenever you like.</div></div>`;
+  if (state.role === 'student' && state.page === 'subjects') return `${welcome('Your subjects', 'Your school’s learning materials will appear here.')}<div class="page-section">${!state.apiUser ? apiConnectionPanel() : emptyPanel('No lessons yet', 'Your school has not published lessons for your account yet.')}</div>`;
   if (state.page === 'classes') return classPage();
   if (state.page === 'assignments') return assignmentPage();
   if (state.page === 'progress') return progressPage();
@@ -303,33 +355,51 @@ function assignmentPage() {
 function apiConnectionPanel() {
   const connected = Boolean(apiToken() && state.apiUser);
   const canConfigureApi = state.role === 'developer';
-  return `<section class="panel api-panel"><div class="panel-heading"><div><h2>School connection</h2><p>Connect BrightPath to your school’s secure InfinityFree API.</p></div><span class="demo-badge">${connected ? 'SIGNED IN' : 'SETUP'}</span></div>
+  const learner = state.role === 'student';
+  const biometricAvailable = Boolean(window.BrightPathNative?.isBiometricAvailable?.());
+  const hasBiometricSession = Boolean(window.BrightPathNative?.hasBiometricSession?.());
+  return `<section class="panel api-panel ${learner ? 'learner-login-panel' : ''}"><div class="panel-heading"><div><h2>${learner ? 'Let’s get learning!' : 'School sign-in'}</h2><p>${learner ? 'Your school sets up your account. Ask a parent or teacher if you need help.' : 'Sign in with the account provided by your school.'}</p></div><span class="demo-badge">${connected ? 'SIGNED IN' : learner ? 'STUDENT' : 'SCHOOL'}</span></div>
     ${canConfigureApi ? `<label class="form-label" for="api-base-input">Developer API test override</label>
       <div class="api-url-row"><input id="api-base-input" type="url" inputmode="url" placeholder="https://your-school-site.example" value="${escapeHTML(state.apiBase)}" autocomplete="url"><button class="secondary-button" data-action="test-api">Test connection</button></div>
       <p class="form-hint">This override is saved on this device only. For all users, set the public API origin in site-config.js. Database credentials stay on the PHP server.</p>`
-      : `<p class="form-hint">School API: ${escapeHTML(state.apiBase || 'Not configured. Ask your developer.')}</p><button class="secondary-button" data-action="test-api">Check school connection</button>`}
-    <div class="api-status ${state.apiStatus.startsWith('Connected') ? 'success' : state.apiStatus ? 'error' : ''}" id="api-status" role="status">${escapeHTML(state.apiStatus || 'Connection has not been tested on this device.')}</div>
-    ${connected ? `<div class="signed-in-row"><span>Signed in as <strong>${escapeHTML(state.apiUser.name || state.apiUser.email)}</strong></span><button class="text-button" data-action="api-signout">Sign out</button></div>` : `<form class="api-login-form" id="api-login-form"><h3>School account sign in</h3><div class="login-fields"><label class="form-label">School email<input name="email" type="email" autocomplete="username" required maxlength="190" placeholder="you@school.example"></label><label class="form-label">Password<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128" placeholder="Your school password"></label></div><button class="primary-button" type="submit">Sign in securely</button><p class="form-hint">Your sign-in token stays in this app session and is not included in GitHub.</p></form>`}
+      : learner ? '' : `<p class="form-hint">School API: ${escapeHTML(state.apiBase || 'Not configured. Ask your school administrator.')}</p>`}
+    <div class="api-status ${state.apiStatus.startsWith('Connected') ? 'success' : state.apiStatus ? 'error' : ''}" id="api-status" role="status">${escapeHTML(state.apiStatus || (learner ? 'Your school account is ready when you sign in.' : 'Connection has not been tested on this device.'))}</div>
+    ${connected ? `<div class="signed-in-row"><span>Signed in as <strong>${escapeHTML(state.apiUser.name || state.apiUser.email)}</strong></span><button class="text-button" data-action="api-signout">Sign out</button></div>
+      ${biometricAvailable && !hasBiometricSession ? '<button class="secondary-button biometric-enroll" data-action="enable-biometric">Turn on fingerprint sign-in</button>' : ''}`
+      : `<form class="api-login-form" id="api-login-form"><h3>${learner ? 'Sign in to your class' : 'School account'}</h3><div class="login-fields"><label class="form-label">${learner ? 'School email' : 'Email'}<input name="email" type="email" autocomplete="username" required maxlength="190" placeholder="${learner ? 'Your school email' : 'name@school.org'}"></label><label class="form-label">Password<input name="password" type="password" autocomplete="current-password" required minlength="8" maxlength="128" placeholder="Your password"></label></div><button class="primary-button" type="submit">${learner ? 'Start learning' : 'Sign in securely'} <span aria-hidden="true">→</span></button>
+      ${biometricAvailable && hasBiometricSession ? '<button class="secondary-button biometric-login" type="button" data-action="biometric-login">Sign in with fingerprint</button>' : ''}
+      <p class="form-hint">${learner ? 'Need help signing in? Ask your parent, teacher, or tutor. You never need to set up a school connection.' : 'Your sign-in token stays in this app session and is not included in GitHub.'}</p>${learner ? '<button class="text-button role-entry-link" type="button" data-action="choose-workspace">Parent or tutor sign-in</button>' : ''}</form>`}
     ${!connected && state.role === 'developer' ? `<form class="api-login-form" id="api-bootstrap-form"><h3>One-time school administrator setup</h3><p class="form-hint">Use only once after importing the database. Keep the setup key private, then remove it from the server configuration.</p><div class="login-fields"><label class="form-label">Administrator name<input name="name" required maxlength="120" autocomplete="name"></label><label class="form-label">Administrator email<input name="email" type="email" required maxlength="190" autocomplete="email"></label><label class="form-label">Strong password<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label><label class="form-label">One-time setup key<input name="bootstrap_key" type="password" required autocomplete="off"></label></div><button class="primary-button" type="submit">Create first administrator</button></form>` : ''}
     ${connected && state.apiUser.role === 'admin' ? `<form class="api-login-form" id="api-create-user-form"><h3>Create a school account</h3><div class="login-fields"><label class="form-label">Full name<input name="name" required maxlength="120" autocomplete="name"></label><label class="form-label">Email<input name="email" type="email" required maxlength="190" autocomplete="email"></label><label class="form-label">Role<select name="role" required><option value="student">Student</option><option value="parent">Parent</option><option value="tutor">Tutor</option></select></label><label class="form-label" id="new-user-grade-label">Student grade<select name="grade" required>${Array.from({ length: 8 }, (_, i) => `<option value="${i + 1}">Grade ${i + 1}</option>`).join('')}</select></label><label class="form-label">Temporary password<input name="password" type="password" required minlength="12" maxlength="128" autocomplete="new-password"></label></div><button class="primary-button" type="submit">Create account</button><p class="form-hint">Share temporary credentials privately with a parent or guardian. A parent-student link must be verified before enabling family records.</p></form>` : ''}
-    ${connected && ['tutor', 'admin'].includes(state.apiUser.role) ? `<form class="api-login-form" id="api-create-assignment-form"><h3>Publish an assignment</h3><div class="login-fields"><label class="form-label">Assignment title<input name="title" required maxlength="180"></label><label class="form-label">Grade<select name="grade" required>${Array.from({ length: 8 }, (_, i) => `<option value="${i + 1}">Grade ${i + 1}</option>`).join('')}</select></label><label class="form-label wide-field">Instructions<textarea name="description" rows="2" maxlength="5000" placeholder="What should learners do?"></textarea></label><label class="form-label">Due date<input name="due_at" type="date"></label></div><button class="primary-button" type="submit">Publish assignment</button></form>` : ''}
-    ${window.BrightPathNative ? '<button class="secondary-button reminder-test" data-action="schedule-reminder">Try a 1-minute notification</button>' : ''}
-    <div class="callout api-safety">For student privacy, database credentials and setup keys stay on the server and must never be entered in this app.</div>
+    ${connected && ['tutor', 'admin'].includes(state.apiUser.role) ? `<form class="api-login-form" id="api-create-assignment-form"><h3>Create an assignment</h3><div class="login-fields"><label class="form-label">Assignment title<input name="title" required maxlength="180"></label><label class="form-label">Grade<select name="grade" required>${Array.from({ length: 8 }, (_, i) => `<option value="${i + 1}">Grade ${i + 1}</option>`).join('')}</select></label><label class="form-label">Answer type<select name="assignment_type" id="assignment-type"><option value="file">Photo or file upload</option><option value="choice">Multiple choice · auto-marked</option><option value="text">Written answer · tutor review</option></select></label><label class="form-label">Due date<input name="due_at" type="date"></label><label class="form-label wide-field">Instructions<textarea name="description" rows="2" maxlength="5000" placeholder="What should learners do?"></textarea></label><div class="wide-field assignment-question-fields" id="assignment-question-fields" hidden><label class="form-label">Question<textarea name="question_text" rows="2" maxlength="3000" placeholder="Type your question"></textarea></label><div id="assignment-choice-fields" hidden><div class="choice-authoring">${[0, 1, 2, 3].map(index => `<label class="form-label">Answer ${String.fromCharCode(65 + index)}<input name="choice_${index}" maxlength="300" placeholder="Answer option ${String.fromCharCode(65 + index)}"></label>`).join('')}</div><label class="form-label">Correct answer<select name="correct_choice">${[0, 1, 2, 3].map(index => `<option value="${index}">Answer ${String.fromCharCode(65 + index)}</option>`).join('')}</select></label></div></div><label class="form-label wide-field">Optional assignment document (PDF or Word)<input name="resource_file" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><span class="form-hint">Learners can securely download this file from their assignment. Maximum 8 MB.</span></label></div><button class="primary-button" type="submit">Publish assignment</button></form>` : ''}
+    ${window.BrightPathNative && state.role === 'developer' ? '<button class="secondary-button reminder-test" data-action="schedule-reminder">Try a 1-minute notification</button>' : ''}
+    ${learner ? '' : '<div class="callout api-safety">For student privacy, database credentials and setup keys stay on the server and must never be entered in this app.</div>'}
   </section>`;
 }
 
 function remoteAssignmentCard(item) {
   const id = Number(item.id);
   const due = item.due_at ? new Date(`${item.due_at}T00:00:00`).toLocaleDateString() : 'No due date';
-  return `<article class="remote-assignment" data-remote-assignment="${id}">
-    <div class="remote-assignment-top"><div><h3>${escapeHTML(item.title)}</h3><p>${escapeHTML(item.description || 'Add your work for your teacher to review.')}</p></div><span class="task-tag ${item.submitted ? '' : 'due'}">${item.submitted ? 'SUBMITTED' : escapeHTML(due)}</span></div>
-    <div class="attachment-picker">
-      <label class="attachment-button camera-button"><span aria-hidden="true">◎</span> Take a photo<input type="file" accept="image/*" capture="environment" data-file-assignment="${id}" aria-label="Take a photo for ${escapeHTML(item.title)}"></label>
-      <label class="attachment-button"><span aria-hidden="true">＋</span> Choose a file<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" data-file-assignment="${id}" aria-label="Choose a file for ${escapeHTML(item.title)}"></label>
+  const type = item.assignment_type || 'file';
+  const choices = type === 'choice' ? JSON.parse(item.choices_json || '[]') : [];
+  const statusText = type === 'choice' && item.submitted
+    ? Number(item.is_correct) === 1 ? 'CORRECT' : 'TRY AGAIN'
+    : item.submitted ? 'SUBMITTED' : due;
+  const questionContent = type === 'choice'
+    ? `<fieldset class="question-answer"><legend>${escapeHTML(item.question_text || 'Choose the best answer')}</legend>${choices.map((choice, index) => `<label class="answer-choice"><input type="radio" name="answer-${id}" value="${index}" ${item.selected_choice !== null && Number(item.selected_choice) === index ? 'checked' : ''}><span>${escapeHTML(choice)}</span></label>`).join('')}</fieldset>`
+    : type === 'text'
+      ? `<label class="form-label question-answer">${escapeHTML(item.question_text || 'Write your answer')}<textarea maxlength="5000" rows="4" data-answer-text="${id}" placeholder="Write your answer here">${escapeHTML(item.answer_text || '')}</textarea></label>`
+      : `<div class="attachment-picker">
+      <label class="attachment-button camera-button">${icon('camera')} Take a photo<input type="file" accept="image/*" capture="environment" data-file-assignment="${id}" aria-label="Take a photo for ${escapeHTML(item.title)}"></label>
+      <label class="attachment-button">${icon('file')} Choose a file<input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" data-file-assignment="${id}" aria-label="Choose a file for ${escapeHTML(item.title)}"></label>
     </div>
     <div class="selected-file" id="selected-file-${id}">${item.submitted ? 'Your teacher has your work · You can send an updated file' : 'No file selected · Photos or PDF, up to 8 MB'}</div>
-    <label class="form-label notes-label">Note for your tutor <textarea maxlength="1000" rows="2" data-note-assignment="${id}" placeholder="Add a short note (optional)"></textarea></label>
-    <button class="primary-button submit-work-button" data-action="submit-work" data-assignment-id="${id}">Submit work <span>→</span></button>
+    <label class="form-label notes-label">Note for your tutor <textarea maxlength="1000" rows="2" data-note-assignment="${id}" placeholder="Add a short note (optional)"></textarea></label>`;
+  return `<article class="remote-assignment" data-remote-assignment="${id}">
+    <div class="remote-assignment-top"><div><h3>${escapeHTML(item.title)}</h3><p>${escapeHTML(item.description || 'Add your work for your teacher to review.')}</p></div><span class="task-tag ${item.submitted && !(type === 'choice' && Number(item.is_correct) === 0) ? '' : 'due'}">${escapeHTML(statusText)}</span></div>
+    ${item.resource_original_filename ? `<button class="resource-download" data-action="download-assignment-resource" data-assignment-id="${id}">${icon('download')} Download ${escapeHTML(item.resource_original_filename)}</button>` : ''}
+    ${questionContent}
+    <button class="primary-button submit-work-button" data-action="submit-work" data-assignment-id="${id}">${type === 'file' ? 'Submit work' : 'Send answer'} <span>→</span></button>
   </article>`;
 }
 
@@ -481,6 +551,7 @@ function developerPage() {
 function render() {
   navMarkup();
   header();
+  document.body.classList.toggle('student-space', state.role === 'student');
   roleSelect.value = state.role;
   roleSelect.disabled = Boolean(state.apiUser);
   pageContent.innerHTML = fullPage();
@@ -591,7 +662,9 @@ async function loadRemoteAssignments() {
     if (error.message.includes('session expired') || error.message.includes('Sign in')) {
       sessionStorage.removeItem('brightpath-token');
       sessionStorage.removeItem('brightpath-user');
+      window.BrightPathNative?.clearBiometricSessionFromApp?.();
       state.apiUser = null;
+      roleSelect.disabled = false;
     }
   }
   render();
@@ -634,6 +707,9 @@ async function signInToApi(form) {
     state.apiUser = result.user;
     state.role = result.user.role === 'admin' ? 'developer' : result.user.role;
     state.page = 'home';
+    if (window.BrightPathNative?.hasBiometricSession?.()) {
+      window.BrightPathNative.clearBiometricSessionFromApp();
+    }
     roleSelect.value = state.role;
     roleSelect.disabled = true;
     state.remoteAssignments = [];
@@ -728,6 +804,19 @@ document.addEventListener('click', event => {
     toast('Messaging is a demo. Safe, moderated messaging needs a secure service.');
   } else if (target.dataset.action === 'test-api') {
     testApiConnection();
+  } else if (target.dataset.action === 'choose-workspace') {
+    showRolePicker();
+  } else if (target.dataset.action === 'enable-biometric') {
+    if (window.BrightPathNative?.saveBiometricSession && apiToken() && state.apiUser) {
+      window.BrightPathNative.saveBiometricSession(
+        apiToken(), JSON.stringify(state.apiUser), state.apiBase, String(Date.now()));
+      setApiStatus('Confirm fingerprint unlock on your device.');
+    }
+  } else if (target.dataset.action === 'biometric-login') {
+    if (window.BrightPathNative?.unlockBiometricSession) {
+      window.BrightPathNative.unlockBiometricSession(String(Date.now()));
+      setApiStatus('Confirm your fingerprint to sign in.');
+    }
   } else if (target.dataset.action === 'schedule-reminder') {
     if (window.BrightPathNative?.scheduleNotification) {
       window.BrightPathNative.scheduleNotification('BrightPath reminder', 'Time for your next learning adventure!', 1);
@@ -737,6 +826,8 @@ document.addEventListener('click', event => {
     signOutApi();
   } else if (target.dataset.action === 'submit-work') {
     submitAssignment(target.dataset.assignmentId);
+  } else if (target.dataset.action === 'download-assignment-resource') {
+    downloadAssignmentResource(target.dataset.assignmentId);
   } else if (target.dataset.action === 'download-submission') {
     downloadSubmission(target.dataset.submissionId);
   }
@@ -800,16 +891,32 @@ async function createSchoolAssignment(form) {
   const submit = form.querySelector('[type="submit"]');
   submit.disabled = true;
   try {
-    const body = {
-      title: form.elements.title.value.trim(),
-      description: form.elements.description.value.trim(),
-      grade: Number(form.elements.grade.value),
-      due_at: form.elements.due_at.value
-    };
+    const type = form.elements.assignment_type.value;
+    const body = new FormData();
+    body.set('title', form.elements.title.value.trim());
+    body.set('description', form.elements.description.value.trim());
+    body.set('grade', form.elements.grade.value);
+    body.set('due_at', form.elements.due_at.value);
+    body.set('assignment_type', type);
+    if (type !== 'file') body.set('question_text', form.elements.question_text.value.trim());
+    if (type === 'choice') {
+      const choices = [0, 1, 2, 3].map(index => form.elements[`choice_${index}`].value.trim());
+      if (choices.some(choice => !choice)) throw new Error('Add all four answer choices for this multiple-choice question.');
+      body.set('choices_json', JSON.stringify(choices));
+      body.set('correct_choice', form.elements.correct_choice.value);
+    }
+    if (form.elements.resource_file.files?.[0]) {
+      const resource = form.elements.resource_file.files[0];
+      if (resource.size > 8 * 1024 * 1024) throw new Error('Assignment documents must be 8 MB or smaller.');
+      if (!['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(resource.type)
+        && !/\.(pdf|doc|docx)$/i.test(resource.name)) {
+        throw new Error('Choose a PDF, DOC, or DOCX assignment document.');
+      }
+      body.set('resource_file', resource, resource.name);
+    }
     await apiRequest('assignments', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
+      body
     });
     form.reset();
     state.remoteTutorDataLoaded = false;
@@ -825,7 +932,7 @@ async function createSchoolAssignment(form) {
 }
 
 async function downloadSubmission(id) {
-  const item = state.remoteSubmissions.find(submission => String(submission.id) === String(id));
+  const item = state.remoteSubmissions.find(submission => String(submission.id) === String(id) && submission.submission_type !== 'answer');
   if (!item) {
     toast('That submission is no longer available.');
     return;
@@ -854,6 +961,39 @@ async function downloadSubmission(id) {
   }
 }
 
+async function downloadAssignmentResource(id) {
+  const assignment = state.remoteAssignments.find(item => String(item.id) === String(id))
+    || state.remoteTutorAssignments.find(item => String(item.id) === String(id));
+  if (!assignment?.resource_original_filename) {
+    toast('This resource is no longer available.');
+    return;
+  }
+  try {
+    const headers = new Headers();
+    headers.set('Authorization', `Bearer ${apiToken()}`);
+    const response = await fetch(`${apiUrl('assignments/download')}&id=${encodeURIComponent(id)}`, {
+      headers,
+      mode: 'cors'
+    });
+    if (!response.ok) {
+      let message = 'The assignment document could not be downloaded.';
+      try { message = (await response.json()).error || message; }
+      catch { message = 'The server returned an invalid download response.'; }
+      throw new Error(message);
+    }
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = assignment.resource_original_filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  } catch (error) {
+    setApiStatus(error.message || 'The assignment document could not be downloaded.', 'error');
+  }
+}
+
 async function signOutApi() {
   let message = 'Signed out on this device.';
   try {
@@ -861,6 +1001,7 @@ async function signOutApi() {
   } catch (error) {
     message = `Signed out on this device. The server token could not be revoked: ${error.message}`;
   } finally {
+    window.BrightPathNative?.clearBiometricSessionFromApp?.();
     sessionStorage.removeItem('brightpath-token');
     sessionStorage.removeItem('brightpath-user');
     state.apiUser = null;
@@ -873,6 +1014,53 @@ async function signOutApi() {
 }
 
 async function submitAssignment(id) {
+  const assignment = state.remoteAssignments.find(item => String(item.id) === String(id));
+  if (!assignment) {
+    toast('This assignment is no longer available.');
+    return;
+  }
+  if (!apiToken() || !state.apiUser) {
+    setApiStatus('Sign in to your school account before submitting work.', 'error');
+    document.querySelector('#api-login-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toast('Sign in to submit your answer to your teacher.');
+    return;
+  }
+  if ((assignment.assignment_type || 'file') !== 'file') {
+    const card = document.querySelector(`[data-remote-assignment="${CSS.escape(id)}"]`);
+    const button = card?.querySelector('[data-action="submit-work"]');
+    if (!card || !button) return;
+    const body = { assignment_id: Number(id) };
+    if (assignment.assignment_type === 'choice') {
+      const selected = card.querySelector(`input[name="answer-${CSS.escape(id)}"]:checked`);
+      if (!selected) {
+        toast('Choose an answer first.');
+        return;
+      }
+      body.selected_choice = Number(selected.value);
+    } else {
+      body.answer_text = card.querySelector(`[data-answer-text="${CSS.escape(id)}"]`).value.trim();
+      if (!body.answer_text) {
+        toast('Write your answer first.');
+        return;
+      }
+    }
+    button.disabled = true;
+    button.textContent = 'Sending answer…';
+    try {
+      const result = await apiRequest('submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      await loadRemoteAssignments();
+      toast(result.message || 'Your answer was sent to your teacher.');
+    } catch (error) {
+      setApiStatus(error.message || 'Answer could not be sent. Check your connection and try again.', 'error');
+      button.disabled = false;
+      button.textContent = 'Try again';
+    }
+    return;
+  }
   const file = state.selectedFiles.get(id);
   if (!apiToken() || !state.apiUser) {
     setApiStatus('Sign in to your school account before submitting work.', 'error');
@@ -947,6 +1135,16 @@ document.addEventListener('change', event => {
     const grade = document.querySelector('#new-user-grade-label');
     grade.hidden = event.target.value !== 'student';
     grade.querySelector('select').required = event.target.value === 'student';
+  }
+  if (event.target.id === 'assignment-type') {
+    const isQuestion = event.target.value !== 'file';
+    const isChoice = event.target.value === 'choice';
+    const questionFields = document.querySelector('#assignment-question-fields');
+    const choiceFields = document.querySelector('#assignment-choice-fields');
+    questionFields.hidden = !isQuestion;
+    choiceFields.hidden = !isChoice;
+    questionFields.querySelector('[name="question_text"]').required = isQuestion;
+    choiceFields.querySelectorAll('input[name^="choice_"]').forEach(input => { input.required = isChoice; });
   }
   const input = event.target.closest('[data-file-assignment]');
   if (!input || !input.files?.length) return;
@@ -1061,15 +1259,22 @@ document.querySelector('#install-button').addEventListener('click', async () => 
 function configureAndroidDownload() {
   const banner = document.querySelector('#android-install-banner');
   const link = document.querySelector('#android-download-link');
-  if (!state.androidDownloadUrl) return;
+  if (window.BrightPathNative?.isNativeApp?.()) {
+    banner.hidden = true;
+    return;
+  }
   banner.hidden = false;
+  link.href = 'https://github.com/Alexander12xx/BPATH/releases';
+  link.textContent = 'Get Android app';
+  link.hidden = false;
   try {
+    if (!state.androidDownloadUrl) return;
     const url = new URL(state.androidDownloadUrl);
     if (url.protocol !== 'https:' || url.username || url.password) {
       throw new Error('The Android download link must use HTTPS and cannot include credentials.');
     }
     link.href = url.href;
-    link.hidden = false;
+    link.textContent = 'Download APK';
   } catch (error) {
     const message = document.createElement('small');
     message.className = 'android-download-error';

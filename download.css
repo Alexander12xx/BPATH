@@ -59,11 +59,12 @@ h1 { margin: 17px 0 14px; font-size: clamp(42px, 6vw, 69px); line-height: 1.02; 
 h1 span { color: var(--purple); }
 .hero-description { max-width: 440px; margin: 0; color: var(--muted); font-size: 16px; line-height: 1.75; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 27px; }
-.button { min-height: 48px; padding: 0 19px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 13px; font: inherit; font-size: 13px; font-weight: 750; cursor: pointer; }
+.button { min-height: 54px; padding: 0 22px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 14px; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
 .button svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .button-primary { background: var(--purple); color: white; box-shadow: 0 8px 18px rgb(102 84 217 / 20%); }
 .button-primary:hover { background: var(--purple-dark); }
 .button-secondary { border: 1px solid var(--line); background: white; color: #4f4d67; }
+.hero-actions #android-release-link { min-width: 235px; }
 .download-status { min-height: 18px; margin-top: 13px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 
 .hero-art { min-height: 330px; position: relative; display: grid; place-items: center; }

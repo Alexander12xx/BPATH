@@ -1,4 +1,5 @@
 const downloadLink = document.querySelector('#android-download-link');
+const releaseLink = document.querySelector('#android-release-link');
 const downloadStatus = document.querySelector('#download-status');
 const installButton = document.querySelector('#install-button');
 const androidDownloadUrl = window.BRIGHTPATH_CONFIG?.androidDownloadUrl || '';
@@ -11,13 +12,14 @@ if (androidDownloadUrl) {
     }
     downloadLink.href = url.href;
     downloadLink.hidden = false;
+    releaseLink.hidden = true;
     downloadStatus.textContent = 'Download the signed APK. Android will ask you to approve installation from this source.';
   } catch (error) {
     downloadStatus.textContent = 'The Android download link is not configured correctly. Please contact the developer.';
     console.error('BrightPath download configuration error:', error);
   }
 } else {
-  downloadStatus.textContent = 'A signed Android APK has not been published yet. Android release information is available from the release page.';
+  downloadStatus.textContent = 'No signed Android APK is published yet. Check the release page for availability. “Install learning app” is a web app, not the Android app.';
 }
 
 let installPrompt;
@@ -36,7 +38,7 @@ installButton.addEventListener('click', async () => {
 });
 
 window.addEventListener('appinstalled', () => {
-  downloadStatus.textContent = 'BrightPath has been installed on this device.';
+  downloadStatus.textContent = 'The BrightPath web app has been installed. To install the Android app, download its APK from the release page.';
 });
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
