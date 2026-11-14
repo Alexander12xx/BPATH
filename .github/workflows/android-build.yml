@@ -1,0 +1,57 @@
+name: Android app build
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Check JavaScript syntax
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check app.js
+
+      - name: Check PHP syntax
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+      - run: php -l backend/api/index.php && php -l backend/api/config.example.php
+
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Build development APK
+        run: gradle -p android assembleDebug
+
+      - name: Upload development APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: brightpath-android-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
