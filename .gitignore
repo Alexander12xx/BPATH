@@ -1,0 +1,10 @@
+# InfinityFree-only configuration and uploaded student work
+backend/api/config.php
+backend/api/storage/*
+!backend/api/storage/.htaccess
+!backend/api/storage/index.html
+android/.gradle/
+android/local.properties
+android/**/build/
+*.jks
+*.keystore
