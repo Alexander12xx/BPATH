@@ -174,24 +174,29 @@ try {
         $user = auth_user($db);
         if ($user['role'] === 'student' && $user['grade'] !== null) {
             $stmt = $db->prepare(
-                "SELECT a.id, a.title, a.description, DATE_FORMAT(a.due_at, '%Y-%m-%d') AS due_at,
-                        IF(s.id IS NULL, 0, 1) AS submitted
+                "SELECT a.id, a.title, a.description, a.assignment_type, a.question_text, a.choices_json,
+                        a.resource_original_filename, DATE_FORMAT(a.due_at, '%Y-%m-%d') AS due_at,
+                        IF(s.id IS NULL AND aa.id IS NULL, 0, 1) AS submitted,
+                        aa.selected_choice, aa.answer_text, aa.is_correct
                  FROM assignments a
                  LEFT JOIN submissions s ON s.assignment_id = a.id AND s.student_id = ?
+                 LEFT JOIN assignment_answers aa ON aa.assignment_id = a.id AND aa.student_id = ?
                  WHERE a.grade = ? AND a.status = 'published'
                    AND (a.due_at IS NULL OR a.due_at >= UTC_DATE())
                  ORDER BY a.due_at IS NULL, a.due_at, a.id LIMIT 100"
             );
-            $stmt->bind_param('ii', $user['id'], $user['grade']);
+            $stmt->bind_param('iii', $user['id'], $user['id'], $user['grade']);
         } elseif ($user['role'] === 'tutor') {
             $stmt = $db->prepare(
-                "SELECT id, title, description, grade, status, DATE_FORMAT(due_at, '%Y-%m-%d') AS due_at
+                "SELECT id, title, description, assignment_type, question_text, choices_json, correct_choice,
+                        resource_original_filename, grade, status, DATE_FORMAT(due_at, '%Y-%m-%d') AS due_at
                  FROM assignments WHERE created_by = ? ORDER BY created_at DESC LIMIT 100"
             );
             $stmt->bind_param('i', $user['id']);
         } elseif ($user['role'] === 'admin') {
             $stmt = $db->prepare(
-                "SELECT id, title, description, grade, status, DATE_FORMAT(due_at, '%Y-%m-%d') AS due_at
+                "SELECT id, title, description, assignment_type, question_text, choices_json, correct_choice,
+                        resource_original_filename, grade, status, DATE_FORMAT(due_at, '%Y-%m-%d') AS due_at
                  FROM assignments ORDER BY created_at DESC LIMIT 100"
             );
         } else {
@@ -212,14 +217,41 @@ try {
         if (!in_array($user['role'], ['tutor', 'admin'], true)) {
             respond(403, ['ok' => false, 'error' => 'Only a tutor or administrator can create assignments.']);
         }
-        $body = body_json();
+        $contentType = (string)($_SERVER['CONTENT_TYPE'] ?? '');
+        $body = stripos($contentType, 'application/json') === 0 ? body_json() : $_POST;
         $title = trim((string)($body['title'] ?? ''));
         $description = trim((string)($body['description'] ?? ''));
         $grade = filter_var($body['grade'] ?? null, FILTER_VALIDATE_INT);
         $dueAt = trim((string)($body['due_at'] ?? ''));
+        $assignmentType = (string)($body['assignment_type'] ?? 'file');
+        $questionText = trim((string)($body['question_text'] ?? ''));
+        $choices = json_decode((string)($body['choices_json'] ?? '[]'), true);
+        $correctChoice = isset($body['correct_choice']) ? filter_var($body['correct_choice'], FILTER_VALIDATE_INT) : null;
         if ($title === '' || strlen($title) > 180 || strlen($description) > 5000
-            || $grade === false || $grade < 1 || $grade > 8) {
-            respond(422, ['ok' => false, 'error' => 'Enter a title, description under 5,000 characters, and grade 1–8.']);
+            || $grade === false || $grade < 1 || $grade > 8
+            || !in_array($assignmentType, ['file', 'choice', 'text'], true)) {
+            respond(422, ['ok' => false, 'error' => 'Enter a title, description under 5,000 characters, a valid type, and grade 1–8.']);
+        }
+        if ($assignmentType === 'choice' && (
+            $questionText === '' || strlen($questionText) > 3000 || !is_array($choices)
+            || count($choices) < 2 || count($choices) > 4
+            || $correctChoice === false || $correctChoice === null
+            || $correctChoice < 0 || $correctChoice >= count($choices)
+        )) {
+            respond(422, ['ok' => false, 'error' => 'A choice assignment needs a question, 2–4 answers, and one correct answer.']);
+        }
+        if ($assignmentType === 'text' && ($questionText === '' || strlen($questionText) > 3000)) {
+            respond(422, ['ok' => false, 'error' => 'A written-answer assignment needs a question under 3,000 characters.']);
+        }
+        if ($assignmentType !== 'choice') {
+            $choices = null;
+            $correctChoice = null;
+        } else {
+            foreach ($choices as $choice) {
+                if (!is_string($choice) || trim($choice) === '' || strlen($choice) > 300) {
+                    respond(422, ['ok' => false, 'error' => 'Each answer choice must contain 1–300 characters.']);
+                }
+            }
         }
         if ($dueAt !== '') {
             $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dueAt);
@@ -229,15 +261,64 @@ try {
         } else {
             $dueAt = null;
         }
+        $resourceStoredName = null;
+        $resourceOriginalName = null;
+        $resourceMime = null;
+        $resourceSize = 0;
+        $resource = $_FILES['resource_file'] ?? null;
+        if ($resource && $resource['error'] !== UPLOAD_ERR_NO_FILE) {
+            $maxBytes = max(1024, min((int)($config['max_upload_bytes'] ?? 8388608), 8388608));
+            if ($resource['error'] !== UPLOAD_ERR_OK || $resource['size'] < 1 || $resource['size'] > $maxBytes) {
+                respond(422, ['ok' => false, 'error' => 'Choose a PDF or Word resource under 8 MB.']);
+            }
+            $resourceMime = (new finfo(FILEINFO_MIME_TYPE))->file($resource['tmp_name']);
+            $resourceExtensions = [
+                'application/pdf' => 'pdf',
+                'application/msword' => 'doc',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document' => 'docx'
+            ];
+            if (!isset($resourceExtensions[$resourceMime])) {
+                respond(415, ['ok' => false, 'error' => 'Only PDF, DOC, or DOCX assignment resources are accepted.']);
+            }
+            $uploadDir = (string)($config['upload_dir'] ?? (__DIR__ . '/storage'));
+            if (!is_dir($uploadDir) && !mkdir($uploadDir, 0700, true) && !is_dir($uploadDir)) {
+                throw new RuntimeException('Upload directory could not be created.');
+            }
+            $resourceStoredName = bin2hex(random_bytes(20)) . '.' . $resourceExtensions[$resourceMime];
+            $target = rtrim($uploadDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $resourceStoredName;
+            if (!move_uploaded_file($resource['tmp_name'], $target)) {
+                throw new RuntimeException('Assignment resource could not be stored.');
+            }
+            $resourceOriginalName = substr(basename((string)$resource['name']), 0, 180);
+            $resourceSize = (int)$resource['size'];
+        }
         $creatorId = (int)$user['id'];
-        $stmt = $db->prepare(
-            "INSERT INTO assignments (title, description, grade, due_at, status, created_by)
-             VALUES (?, ?, ?, ?, 'published', ?)"
-        );
-        $stmt->bind_param('ssisi', $title, $description, $grade, $dueAt, $creatorId);
-        $stmt->execute();
-        $assignmentId = $db->insert_id;
-        $stmt->close();
+        try {
+            $stmt = $db->prepare(
+                "INSERT INTO assignments
+                 (title, description, grade, due_at, assignment_type, question_text, choices_json, correct_choice,
+                  resource_stored_filename, resource_original_filename, resource_mime_type, resource_file_size, status, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)"
+            );
+            $choicesJson = is_array($choices) ? json_encode($choices, JSON_UNESCAPED_UNICODE) : null;
+            $question = $questionText !== '' ? $questionText : null;
+            $stmt->bind_param(
+                'ssissssisssii',
+                $title, $description, $grade, $dueAt, $assignmentType, $question, $choicesJson,
+                $correctChoice, $resourceStoredName, $resourceOriginalName, $resourceMime, $resourceSize, $creatorId
+            );
+            $stmt->execute();
+            $assignmentId = $db->insert_id;
+            $stmt->close();
+        } catch (Throwable $error) {
+            if ($resourceStoredName !== null) {
+                $storedPath = rtrim($uploadDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $resourceStoredName;
+                if (is_file($storedPath) && !unlink($storedPath)) {
+                    error_log('BrightPath API could not remove a failed assignment resource upload.');
+                }
+            }
+            throw $error;
+        }
         respond(201, ['ok' => true, 'assignment_id' => $assignmentId]);
     }
 
@@ -268,20 +349,118 @@ try {
         respond(201, ['ok' => true, 'user_id' => $newId]);
     }
 
+    if ($route === 'assignments/download' && $method === 'GET') {
+        $user = auth_user($db);
+        $assignmentId = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+        if (!$assignmentId) respond(422, ['ok' => false, 'error' => 'Choose a valid assignment resource.']);
+        if ($user['role'] === 'student' && $user['grade'] !== null) {
+            $stmt = $db->prepare(
+                "SELECT resource_stored_filename, resource_original_filename, resource_mime_type
+                 FROM assignments WHERE id = ? AND grade = ? AND status = 'published' LIMIT 1"
+            );
+            $stmt->bind_param('ii', $assignmentId, $user['grade']);
+        } elseif ($user['role'] === 'tutor') {
+            $stmt = $db->prepare(
+                'SELECT resource_stored_filename, resource_original_filename, resource_mime_type
+                 FROM assignments WHERE id = ? AND created_by = ? LIMIT 1'
+            );
+            $stmt->bind_param('ii', $assignmentId, $user['id']);
+        } elseif ($user['role'] === 'admin') {
+            $stmt = $db->prepare(
+                'SELECT resource_stored_filename, resource_original_filename, resource_mime_type
+                 FROM assignments WHERE id = ? LIMIT 1'
+            );
+            $stmt->bind_param('i', $assignmentId);
+        } else {
+            respond(403, ['ok' => false, 'error' => 'This account cannot download assignment resources.']);
+        }
+        $stmt->execute();
+        $file = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$file || !$file['resource_stored_filename']
+            || !preg_match('/^[a-f0-9]{40}\.(pdf|doc|docx)$/', $file['resource_stored_filename'])) {
+            respond(404, ['ok' => false, 'error' => 'Assignment resource not found.']);
+        }
+        $uploadDir = (string)($config['upload_dir'] ?? (__DIR__ . '/storage'));
+        $path = rtrim($uploadDir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $file['resource_stored_filename'];
+        if (!is_file($path)) respond(404, ['ok' => false, 'error' => 'Assignment resource is no longer available.']);
+        $downloadName = str_replace(["\r", "\n", '"', '\\'], '_', basename($file['resource_original_filename']));
+        header('Content-Type: ' . $file['resource_mime_type']);
+        header('Content-Length: ' . (string)filesize($path));
+        header('Content-Disposition: attachment; filename="' . $downloadName . '"');
+        header('X-Content-Type-Options: nosniff');
+        readfile($path);
+        exit;
+    }
+
     if ($route === 'submissions' && $method === 'POST') {
         $user = auth_user($db);
         require_student($user);
+        $contentType = (string)($_SERVER['CONTENT_TYPE'] ?? '');
+        if (stripos($contentType, 'application/json') === 0) {
+            $body = body_json();
+            $assignmentId = filter_var($body['assignment_id'] ?? null, FILTER_VALIDATE_INT);
+            if (!$assignmentId) respond(422, ['ok' => false, 'error' => 'Choose a valid assignment.']);
+            $stmt = $db->prepare(
+                "SELECT id, assignment_type, choices_json, correct_choice
+                 FROM assignments WHERE id = ? AND grade = ? AND status = 'published'
+                   AND (due_at IS NULL OR due_at >= UTC_DATE()) LIMIT 1"
+            );
+            $stmt->bind_param('ii', $assignmentId, $user['grade']);
+            $stmt->execute();
+            $assignment = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            if (!$assignment || !in_array($assignment['assignment_type'], ['choice', 'text'], true)) {
+                respond(404, ['ok' => false, 'error' => 'This question is not available for your grade.']);
+            }
+            $selectedChoice = null;
+            $answerText = null;
+            $isCorrect = null;
+            if ($assignment['assignment_type'] === 'choice') {
+                $selectedChoice = filter_var($body['selected_choice'] ?? null, FILTER_VALIDATE_INT);
+                $choices = json_decode((string)$assignment['choices_json'], true);
+                if ($selectedChoice === false || $selectedChoice === null || !is_array($choices)
+                    || !array_key_exists($selectedChoice, $choices)) {
+                    respond(422, ['ok' => false, 'error' => 'Choose one of the answers before submitting.']);
+                }
+                $isCorrect = (int)$selectedChoice === (int)$assignment['correct_choice'] ? 1 : 0;
+            } else {
+                $answerText = trim((string)($body['answer_text'] ?? ''));
+                if ($answerText === '' || strlen($answerText) > 5000) {
+                    respond(422, ['ok' => false, 'error' => 'Write an answer under 5,000 characters before submitting.']);
+                }
+            }
+            $studentId = (int)$user['id'];
+            $stmt = $db->prepare(
+                'INSERT INTO assignment_answers (assignment_id, student_id, selected_choice, answer_text, is_correct)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE selected_choice = VALUES(selected_choice),
+                   answer_text = VALUES(answer_text), is_correct = VALUES(is_correct), submitted_at = CURRENT_TIMESTAMP'
+            );
+            $stmt->bind_param('iiisi', $assignmentId, $studentId, $selectedChoice, $answerText, $isCorrect);
+            $stmt->execute();
+            $stmt->close();
+            respond(201, [
+                'ok' => true,
+                'is_correct' => $isCorrect,
+                'message' => $isCorrect === null ? 'Your answer was sent to your teacher.'
+                    : ($isCorrect ? 'That is correct!' : 'Answer submitted. Try again or ask your teacher for help.')
+            ]);
+        }
         $assignmentId = filter_var($_POST['assignment_id'] ?? null, FILTER_VALIDATE_INT);
         $notes = trim((string)($_POST['notes'] ?? ''));
         if (!$assignmentId || strlen($notes) > 1000) {
             respond(422, ['ok' => false, 'error' => 'Choose an assignment and keep your note under 1,000 characters.']);
         }
-        $stmt = $db->prepare("SELECT id FROM assignments WHERE id = ? AND grade = ? AND status = 'published' LIMIT 1");
+        $stmt = $db->prepare(
+            "SELECT id, assignment_type FROM assignments WHERE id = ? AND grade = ? AND status = 'published'
+             AND (due_at IS NULL OR due_at >= UTC_DATE()) LIMIT 1"
+        );
         $stmt->bind_param('ii', $assignmentId, $user['grade']);
         $stmt->execute();
         $allowed = $stmt->get_result()->fetch_assoc();
         $stmt->close();
-        if (!$allowed) {
+        if (!$allowed || $allowed['assignment_type'] !== 'file') {
             respond(404, ['ok' => false, 'error' => 'This assignment is not available for your grade.']);
         }
         $file = $_FILES['file'] ?? null;
@@ -370,9 +549,41 @@ try {
         $result = $stmt->get_result();
         $items = [];
         while ($row = $result->fetch_assoc()) {
+            $row['submission_type'] = 'file';
             $items[] = $row;
         }
         $stmt->close();
+        if ($user['role'] === 'admin') {
+            $stmt = $db->prepare(
+                'SELECT aa.id, aa.assignment_id, a.title, u.name AS student_name, u.grade,
+                        aa.selected_choice, aa.answer_text, aa.is_correct, aa.submitted_at,
+                        a.choices_json, a.assignment_type
+                 FROM assignment_answers aa
+                 JOIN assignments a ON a.id = aa.assignment_id
+                 JOIN users u ON u.id = aa.student_id
+                 ORDER BY aa.submitted_at DESC LIMIT 100'
+            );
+        } else {
+            $stmt = $db->prepare(
+                'SELECT aa.id, aa.assignment_id, a.title, u.name AS student_name, u.grade,
+                        aa.selected_choice, aa.answer_text, aa.is_correct, aa.submitted_at,
+                        a.choices_json, a.assignment_type
+                 FROM assignment_answers aa
+                 JOIN assignments a ON a.id = aa.assignment_id
+                 JOIN users u ON u.id = aa.student_id
+                 WHERE a.created_by = ? ORDER BY aa.submitted_at DESC LIMIT 100'
+            );
+            $stmt->bind_param('i', $user['id']);
+        }
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($row = $result->fetch_assoc()) {
+            $row['submission_type'] = 'answer';
+            $items[] = $row;
+        }
+        $stmt->close();
+        usort($items, static fn(array $a, array $b): int => strcmp((string)$b['submitted_at'], (string)$a['submitted_at']));
+        $items = array_slice($items, 0, 100);
         respond(200, ['ok' => true, 'submissions' => $items]);
     }
 
