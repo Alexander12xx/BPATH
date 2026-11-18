@@ -1,72 +1,209 @@
 # BrightPath
 
-BrightPath is a mobile-first learning app for grades 1–8. The repository contains a small Android Studio app and its shared interface, plus a PHP/MySQL API starter intended for a separate InfinityFree website.
+BrightPath is a learning app for grades 1 to 8. It ships as a **native Android app** with the interface bundled inside the APK, plus a PHP/MySQL API and install page hosted on InfinityFree.
+
+The Android app is not a browser shortcut or a PWA wrapper around a remote site. It has its own launcher icon, a bundled offline app shell, Android Keystore biometric unlock, camera and microphone access for live classes, and local notifications.
+
+> **Release status:** a signed APK is built and waiting at `htdocs1/downloads/brightpath.apk`. Upload the `htdocs1/` folder and the install page serves that file as soon as it is online. The same page checks the file first and falls back to the latest GitHub release, so it never points at a missing download. Publishing a GitHub release is optional.
+
+## What is included
+
+| Area | Details |
+| --- | --- |
+| Accounts | Student and parent self-registration, tutor registration with admin approval, guardian email and consent for students, optional school invite code, family-code parent linking, password recovery, forced password change |
+| Learning | 8 starter lessons with reading content and 24 quiz questions, progress, points, streaks, badges |
+| School work | Assignments with multiple choice, written answers, and file submissions; tutor review and feedback; protected PDF/DOC/DOCX resources |
+| Live classes | Server-issued Jitsi rooms, video or audio-only, attendance, class chat, tutor end-class |
+| Games | Number pop, memory match, word builder, focus drill, server-saved scores and leaderboard |
+| Family and staff | Parent progress view and approvals, tutor student list, admin users, support inbox, audit log, sponsor cards, settings |
+| Safety | Hashed passwords, hashed bearer tokens, prepared statements, CORS allowlist, security headers, login rate limits, validated uploads, storage outside web access, guardian consent, no secrets in the frontend |
+| Android | Signed APK, biometric unlock, camera/mic permissions, notification prompt, local reminders, offline app shell |
+
+## Repository layout
+
+```
+app.html, app.js, styles.css      Kid-friendly app shell and screens
+index.html, download.*, site-config.js   Public Android install page
+manifest.json, sw.js, icon.svg    Web shortcut metadata and offline cache
+backend/api/index.php             Single-file production API (PHP 7.2+)
+backend/api/schema.sql            Fresh-install database schema and starter content
+backend/api/migrate.sql           One-time upgrade for the old InfinityFree database
+backend/api/config.example.php    Server config template (no secrets)
+backend/api/.htaccess             Blocks config and SQL files from the web
+android/                          Native Android project (minSdk 26, targetSdk 34)
+android/keys/                     Release keystore and passwords (gitignored, back up privately)
+.github/workflows/                Debug build and signed release pipeline
+htdocs1/                          Exact copy of what goes in the InfinityFree web root
+htdocs1/downloads/brightpath.apk  Signed APK already available for students
+github files/                     Mirror of the repository layout for GitHub upload
+```
+
+`htdocs1/`, `github files/`, and `android/app/src/main/assets/www/` are deployment copies. The root files are the source of truth.
+
+## Deploy in five steps
+
+Full details, verification commands, and troubleshooting are in [DEPLOYMENT.md](./DEPLOYMENT.md).
+
+1. **Database.** Back up the database. On a fresh database import `schema.sql`. On the existing InfinityFree database run `migrate.sql` once, then `schema.sql`.
+2. **Server config.** Copy `backend/api/config.example.php` to `config.php` on the server and fill in the database host, name, user, password, and allowed origins. Generate a one-time `bootstrap_key`. Never commit `config.php`.
+3. **Upload the secure API.** Replace the old `api/index.php` with `backend/api/index.php`, upload the SQL and `.htaccess` files, and keep `storage/` protected. Verify `https://brightpath.gt.tc/api/index.php?r=health` reports `"api_version":"2.0.0"` and the new feature list.
+4. **Create the first administrator.** Call `auth/bootstrap` once with the bootstrap key, then blank the key in `config.php`.
+5. **Upload the APK.** Copy `htdocs1/` to the web root, including `downloads/brightpath.apk` and `downloads/.htaccess`. Open `https://brightpath.gt.tc/` and confirm the download button appears. A GitHub release is an optional second mirror.
+
+## Database
+
+The schema creates 30 tables:
+
+`users`, `schools`, `tutors`, `api_tokens`, `login_attempts`, `password_resets`, `parent_child_links`, `tutor_students`, `lessons`, `lesson_questions`, `lesson_progress`, `learning_activity`, `badges`, `user_badges`, `assignments`, `submissions`, `assignment_answers`, `classes`, `class_attendance`, `class_messages`, `conversations`, `conversation_members`, `messages`, `notifications`, `sponsors`, `sponsor_events`, `game_scores`, `support_messages`, `audit_log`, and `app_settings`.
+
+`schema.sql` also seeds starter lessons, quiz questions, badges, and settings. It uses `CREATE TABLE IF NOT EXISTS` and `INSERT IGNORE`, so it is safe to run after `migrate.sql`.
+
+**Fresh database**
+
+```text
+phpMyAdmin â†’ select the database â†’ Import â†’ backend/api/schema.sql
+```
+
+**Existing BrightPath database (InfinityFree)**
+
+```text
+1. Export a backup.
+2. Import backend/api/migrate.sql once.
+3. Import backend/api/schema.sql once.
+```
+
+`migrate.sql` adds the new columns to the legacy `users`, `schools`, `assignments`, `submissions`, `assignment_answers`, and `tutors` tables. It does not delete data. Do not import `migration-v2.sql` from an older copy; it is superseded.
+
+## Server configuration and keys
+
+| Secret | Where it lives | How to create it |
+| --- | --- | --- |
+| MySQL host, database, user, password | `api/config.php` on the server only | InfinityFree control panel â†’ MySQL Databases |
+| `bootstrap_key` | `api/config.php` until the first admin exists | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
+| Android release keystore | `android/keys/brightpath-release.jks` (gitignored) plus an offline backup | Already generated; see `android/keys/STORE-PASSWORD.txt` |
+| Keystore base64 for CI | GitHub secret `ANDROID_KEYSTORE_BASE64` | `android/keys/keystore.b64.txt` |
+| Keystore/key passwords and alias | `android/keys/keystore.properties` and GitHub Actions secrets | Password is in `android/keys/STORE-PASSWORD.txt`; alias is `brightpath` |
+
+The signed APK in this repository was built with that keystore:
+
+| Property | Value |
+| --- | --- |
+| Package | `com.brightpath.learning` |
+| Version | `1.0.0` (versionCode 1) |
+| Minimum Android | 8.0 (API 26) |
+| Size | 2,794,657 bytes |
+| SHA-256 | `7435418FA9F9F4F50219E822ECAB86F84EFBA06B06369C043135FC2EA1DCACD0` |
+| Signer SHA-256 | `4e5ce2061ac635f3c7cb8bb691add70357de77390c1b484ab7f70c11a2e04ab7` |
+
+Back up `android/keys/` privately, never in GitHub. Android only installs an update over an existing app when both APKs use the same key, so losing the keystore means students must uninstall before installing a future version.
+
+Rules:
+
+- `config.php` is **never** committed, uploaded to GitHub Pages, or copied into the APK.
+- `site-config.js` contains public URLs only: the API origin and the Android release links.
+- BrightPath has no shared frontend API key. Each signed-in account gets a random bearer token; the server stores only its SHA-256 hash and an expiry.
+- If an old example bootstrap key was ever public or reused, treat it as compromised and never use it again. The repository contains no active bootstrap key.
+
+Optional mail: InfinityFree may block `mail()`. Leave `mail_enabled` false and use the administrator **Reset password** action, which creates a temporary password that must be changed at the next sign-in.
+
+## API
+
+Base URL: `https://brightpath.gt.tc/api/index.php?r=ROUTE`
+
+- `GET` for reads, `POST` with JSON for changes.
+- Authenticated requests use `Authorization: Bearer TOKEN` or `X-Auth-Token`.
+- CORS accepts only the origins listed in `allowed_origins`; the list must include the site origin and `https://appassets.androidplatform.net`.
+- `GET ?r=health` reports API version, database state, and the enabled feature list.
+
+Main route groups: `auth/*`, `profile/update`, `dashboard`, `lessons*`, `progress`, `assignments*`, `submissions*`, `classes*`, `conversations`, `messages`, `notifications*`, `sponsors*`, `badges`, `games/*`, `contacts`, `parent/*`, `tutor/students*`, `schools*`, `admin/*`, and `support`.
+
+All times are UTC. The frontend converts `datetime-local` values before sending them.
 
 ## Android app
 
-Open the [`android`](./android) folder in Android Studio, install the Android SDK if prompted, and wait for Gradle sync. Choose **Build → Build APK(s)** to make a debug APK. The project can also be built from PowerShell with Java 17, Android SDK platform 35/build-tools 35.0.0, and Gradle 8.9:
+Requirements: JDK 17, Android SDK platform 35, build-tools 35.0.0, Gradle 8.9.
+
+Debug build for testing:
 
 ```powershell
 .\android\gradlew.bat assembleDebug
 ```
 
-The debug APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. It is for testing and sideloading, not a public release. The native app opens its bundled BrightPath interface, so it launches as an Android app and can display the interface offline; the school API requires an internet connection.
+The APK is written to `android/app/build/outputs/apk/debug/app-debug.apk`. Do not publish a debug APK to students.
 
-The Android wrapper includes:
+Signed release APK (already built):
 
-- A launcher icon and native app window around locally bundled web assets.
-- Android system camera capture for assignment photos and the system document picker for PDFs and images.
-- An Android notification permission prompt and a local, testable reminder. Android may defer alarm delivery to save battery.
-- HTTPS-only remote requests and a connection screen for the school API.
-
-The app project is in [`android/app`](./android/app). Gradle copies the root interface into the app's assets when it builds. The project is source code only: no APK is checked into this repository.
-
-After pushing to GitHub, the **Android app build** workflow checks the JavaScript/PHP syntax and builds a development APK. Download the `brightpath-android-debug` artifact from that workflow run under the repository's **Actions** tab, then install it on a test phone. This is a debug build for testing—not a signed public release.
-
-To publish a signed APK from a webpage without Google Play, create a private Android release key and store it as repository Actions secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. Never commit or share the key/password. Push a version tag such as `v1.0.0` to run the **Signed Android release** workflow; it attaches the signed APK to the repository's GitHub Release page for direct download. Keep a safe offline backup of the signing key—without that same key, Android cannot install updates over the existing release. Android asks users to approve installs from the download source.
-
-On a computer with the JDK that comes with Android Studio, a key can be generated with `keytool -genkeypair -v -keystore brightpath-release.jks -alias brightpath -keyalg RSA -keysize 2048 -validity 10000`. Keep that file and its passwords private. In PowerShell, convert it for the `ANDROID_KEYSTORE_BASE64` secret with `[Convert]::ToBase64String([IO.File]::ReadAllBytes('brightpath-release.jks'))`; enter the other three values as repository **Settings → Secrets and variables → Actions** secrets. Do not paste the encoded key into source, chat, or a public issue.
-
-## Web preview and GitHub Pages
-
-Run the browser preview locally:
-
-```powershell
-python -m http.server 8000
+```text
+htdocs1/downloads/brightpath.apk
 ```
 
-Open `http://localhost:8000` for the download/install homepage; choose **Open learning app** to preview the app interface. The Android Studio project builds the native Android install.
+Rebuild it after changing the web app. The Gradle build copies the root web files into `android/app/src/main/assets/www` first, then signs with the local keystore:
 
-To publish the interface on GitHub Pages, push the repository to GitHub and select the default branch and repository root under **Settings → Pages**. On Android, the published page can also be added to the home screen as a PWA. GitHub Pages is static hosting; it cannot run PHP or host the MySQL database.
+```powershell
+$keyDir = 'C:\Users\alemb\OneDrive\Desktop\APP\android\keys'
+$env:ANDROID_KEYSTORE_PATH = Join-Path $keyDir 'brightpath-release.jks'
+$env:ANDROID_KEYSTORE_PASSWORD = (Get-Content (Join-Path $keyDir 'STORE-PASSWORD.txt') -Raw).Trim()
+$env:ANDROID_KEY_ALIAS = 'brightpath'
+$env:ANDROID_KEY_PASSWORD = $env:ANDROID_KEYSTORE_PASSWORD
+$env:GRADLE_USER_HOME = 'C:\Users\alemb\AppData\Local\BrightPathAndroid\gradle-home'
+& 'C:\Users\alemb\AppData\Local\BrightPathAndroid\gradle-8.9\bin\gradle.bat' -p android assembleRelease --no-daemon --console=plain
+```
 
-## InfinityFree app homepage and Android download
+The output is `android/app/build/outputs/apk/release/app-release.apk`. Copy it over `htdocs1/downloads/brightpath.apk` and upload the folder again. Raise `versionCode` and `versionName` in `android/app/build.gradle.kts` for each public update.
 
-The BrightPath `index.html` is the public download/install homepage; the app interface is `app.html`. Upload these root files into the domain's document root (InfinityFree commonly names it `htdocs`): `index.html`, `app.html`, `app.js`, `styles.css`, `download.css`, `download.js`, `manifest.json`, `icon.svg`, `sw.js`, and `site-config.js`. Upload the contents of `backend/api` separately into the `api` folder under that same document root; do not upload Android build files or private server configuration to the public repository.
+Verify the signature before uploading:
 
-The checked-in `site-config.js` points the app at `https://brightpath.gt.tc`. If your site uses a different HTTPS domain, edit the public `site-config.js` to match it. Do not put database credentials in this public file.
+```powershell
+& "$env:ANDROID_HOME\build-tools\35.0.0\apksigner.bat" verify --print-certs htdocs1\downloads\brightpath.apk
+```
 
-The homepage shows a **Download APK** link only when `androidDownloadUrl` points to an existing HTTPS APK. The GitHub repository currently has no published release, so leave this value blank until a signed APK is published. Do not point students at a debug APK for public distribution. Android requires users to approve APK installation from their browser and to allow updates signed with the same private release key. The PWA install button is separate from the direct Android APK download.
+Optional GitHub release: add the four signing secrets to the repository, push a `v*` tag, and the **Signed Android release** workflow builds, verifies, renames the asset to `brightpath.apk`, and publishes it. The stable GitHub link is:
 
-This public file contains only public URLs. **Do not put a MySQL password, API key, bootstrap key, or Android signing secret in `site-config.js`, `app.js`, GitHub Pages, or the APK.** BrightPath does not use a shared frontend API key: the PHP server keeps the MySQL credentials in `backend/api/config.php`, and signed-in accounts receive short-lived bearer tokens.
+```text
+https://github.com/Alexander12xx/BPATH/releases/latest/download/brightpath.apk
+```
 
-## Connect an InfinityFree PHP/MySQL API
+Keep the keystore and passwords safe. Android will only install an update over an existing app when both APKs are signed with the same key.
 
-Keep the API on the PHP host, not in GitHub Pages or the Android source. The browser/app calls the PHP API over HTTPS; PHP connects to MySQL. The MySQL hostname, username, password, and database name are **server-only secrets**.
+The APK uses:
 
-1. In InfinityFree, create a MySQL database and user in the hosting control panel. Note the database hostname, name, and username shown there; the database hostname is not necessarily `localhost`.
-2. In phpMyAdmin, select that database and import [`backend/api/schema.sql`](./backend/api/schema.sql) for a new database. For an existing BrightPath database, import [`backend/api/migration-v2.sql`](./backend/api/migration-v2.sql) once before using the new assignment types.
-3. Copy the contents of `backend/api` into the `api` directory under the same document root as `index.html`. The deployed `index.php` should be reachable at `https://brightpath.gt.tc/api/index.php?r=health`.
-4. On the PHP host, create `api/config.php` **in the same directory as `api/index.php`**. Start from `config.example.php`, fill in the InfinityFree database details, and set `allowed_origins` to the exact InfinityFree origin, the lowercase GitHub Pages origin `https://alexander12xx.github.io` if used, and `https://appassets.androidplatform.net` for the Android app. Do not add trailing slashes. `config.php` must be a PHP file named exactly that (not `config.php.txt`) and must remain server-only; never add it to GitHub or the Android app. Generate a new one-time bootstrap key on your computer, for example with `python -c "import secrets; print(secrets.token_urlsafe(32))"`, and set it in the server-only config.
-5. In `site-config.js`, set `apiBase` to the HTTPS origin of the PHP site. In the Android app, connect using that same origin. Select **Test connection**; success should return JSON with `"database":"connected"`. If the response says API setup is incomplete, `config.php` is missing or is not beside `index.php`.
-6. Use **One-time school administrator setup** once to create the first administrator. Sign in, create school accounts, and share student credentials privately with their parent/guardian. Immediately clear `bootstrap_key` in the server config after setup.
-7. An administrator can create student, parent, and tutor accounts. Tutors can publish grade 1–8 assignments as file submissions, multiple-choice questions (marked by the API, not the app), or written answers for tutor review. Tutors can optionally attach a protected PDF, DOC, or DOCX resource for students to download. Student file submissions accept JPG, PNG, WebP, or PDF (maximum 8 MB).
+- `INTERNET`, `CAMERA`, `RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, and `POST_NOTIFICATIONS`.
+- HTTPS-only traffic and a network security config.
+- A `WebChromeClient` permission bridge so Jitsi can use the camera and microphone after Android grants them.
+- Android Keystore + BiometricPrompt; the password itself is never stored for fingerprint sign-in.
 
-The SQL in [`backend/api/schema.sql`](./backend/api/schema.sql) creates only tables currently used by the implemented API: accounts, assignments, sessions/tokens, file submissions, and assignment answers. The versioned migration adds assignment types, answer storage, and assignment resources to an existing database; export a backup before applying it. The PHP API code is in [`backend/api/index.php`](./backend/api/index.php). Its health endpoint checks the database, sign-in issues short-lived revocable bearer tokens, account creation is administrator-only, tutor assignment/review access is scoped to the tutor's own assignments, and uploaded files are stored under a directory that denies direct web access. The API validates actual upload MIME types, checks student role/grade and the 8 MB limit, hashes passwords, and uses prepared SQL statements. The Android app can optionally protect a short-lived sign-in session using Android biometric authentication and a Keystore-backed AES key; passwords are not stored for fingerprint sign-in.
+The app loads its bundled interface from `appassets.androidplatform.net` and calls the API over HTTPS. The root web files are copied into the APK by a Gradle `Sync` task at build time.
 
-The PHP host must allow HTTPS requests from the exact published GitHub origin and the Android asset origin. If the connection test fails in a browser, check the website address, the PHP-host TLS certificate, the `allowed_origins` list, and the server's PHP/MySQL settings. Never put MySQL credentials or an administrator password in a frontend setting.
+## Public install page
 
-## Current scope and safety
+`index.html` is Android-first:
 
-The interface does not invent learner or progress records; sections without a database endpoint show an empty state. The API currently provides account sign-in, administrator-created accounts, assignment creation, server-marked multiple choice, written-answer review, protected assignment resources, and student file submissions/review. Open self-registration, parent-child linking, parent access to student records, tutor attendance/grading, lesson/progress storage, scheduled classes, real video calls, persistent class chat, and remote push notifications are not implemented. The website now keeps the Android release link visible, but it does not claim an APK exists: a signed APK must be configured and published before students can download the native app. The API still needs to be configured and tested on the actual InfinityFree account. Camera capture, file picking, biometrics, and local reminders need on-device testing.
+- It sends a `HEAD` request to the APK on this site. If `downloads/brightpath.apk` exists, **Download the Android app** points straight at it.
+- If the site copy is missing, it asks the GitHub API for the latest release and uses an `.apk` asset when one exists.
+- If neither exists, it shows the release page and says so instead of linking a missing file.
+- The browser app and the optional web shortcut are offered separately and are not described as the Android app.
 
-This is a starter integration, not a production-ready service for children. Before inviting real students, add verified guardian consent and family linking, server-side role checks for every record, account recovery and login rate limits, secure tutor/class workflows, upload scanning and retention rules, backups, audit/incident procedures, and privacy/safeguarding review for your region. Keep third-party recommendations clearly labeled, age-appropriate, and free from behavioral targeting.
+Set public links in `site-config.js`:
+
+```js
+window.BRIGHTPATH_CONFIG = Object.freeze({
+  apiBase: 'https://brightpath.gt.tc',
+  androidDownloadUrl: 'downloads/brightpath.apk',
+  androidReleaseUrl: 'https://github.com/Alexander12xx/BPATH/releases/latest'
+});
+```
+
+`androidDownloadUrl` is relative to the site root and resolves to `https://brightpath.gt.tc/downloads/brightpath.apk`. An absolute HTTPS URL also works. Only HTTPS is accepted, except a same-origin HTTP URL used for local testing.
+
+## Verification
+
+PHP was reviewed for PHP 7.2 compatibility and JavaScript was runtime-tested in a browser with a mock API. The release APK was built and its signature verified with `apksigner`. Before inviting students:
+
+- Confirm the live health endpoint shows API version `2.0.0` and `database: connected`.
+- Confirm `https://brightpath.gt.tc/` shows **Download the Android app** and the file downloads as `brightpath.apk`.
+- Sign in, register a student with guardian consent, and link a parent.
+- Create a lesson attempt, submit an assignment, and review it as a tutor.
+- Join a Jitsi class on two devices, once with video and once audio-only.
+- Install the signed APK on a real Android phone and test fingerprint unlock, camera, microphone, and notifications.
+- Confirm `config.php`, `schema.sql`, `migrate.sql`, and `storage/` return 403 over HTTP.
+- Review your local safeguarding and privacy requirements before collecting real children's data.
