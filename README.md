@@ -199,7 +199,7 @@ window.BRIGHTPATH_CONFIG = Object.freeze({
 
 PHP was reviewed for PHP 7.2 compatibility and JavaScript was runtime-tested in a browser with a mock API. The release APK was built and its signature verified with `apksigner`. Before inviting students:
 
-- Confirm the live health endpoint shows API version `2.0.0` and `database: connected`.
+- Confirm the live health endpoint shows API version `2.0.0`.
 - Confirm `https://brightpath.gt.tc/` shows **Download the Android app** and the file downloads as `brightpath.apk`.
 - Sign in, register a student with guardian consent, and link a parent.
 - Create a lesson attempt, submit an assignment, and review it as a tutor.
