@@ -13,6 +13,7 @@ import android.provider.MediaStore;
 import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
@@ -26,6 +27,7 @@ import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.fragment.app.FragmentActivity;
 import androidx.webkit.WebViewAssetLoader;
 import androidx.webkit.WebViewClientCompat;
 
@@ -44,9 +46,11 @@ import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import org.json.JSONObject;
 
-public final class MainActivity extends Activity {
+public final class MainActivity extends FragmentActivity {
     private static final int FILE_CHOOSER_REQUEST = 201;
     private static final int NOTIFICATION_PERMISSION_REQUEST = 202;
+    private static final int MEDIA_PERMISSION_REQUEST = 203;
+    private static final int CAMERA_PERMISSION_REQUEST = 204;
     private static final String BIOMETRIC_KEY_ALIAS = "brightpath.biometric.session";
     private static final String BIOMETRIC_PREFS = "brightpath_biometric_session";
     private WebView webView;
@@ -58,6 +62,10 @@ public final class MainActivity extends Activity {
     private String biometricRequestId;
     private boolean biometricUnlock;
     private WebViewAssetLoader assetLoader;
+    private PermissionRequest pendingMediaRequest;
+    private boolean pendingMediaAudio;
+    private boolean pendingMediaVideo;
+    private boolean pendingCameraLaunch;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -76,7 +84,7 @@ public final class MainActivity extends Activity {
         settings.setAllowContentAccess(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setSafeBrowsingEnabled(true);
-        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setMediaPlaybackRequiresUserGesture(false);
         webView.addJavascriptInterface(new BrightPathBridge(), "BrightPathNative");
         webView.setWebViewClient(new WebViewClientCompat() {
             @Override
@@ -102,6 +110,11 @@ public final class MainActivity extends Activity {
         });
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
+            public void onPermissionRequest(final PermissionRequest request) {
+                runOnUiThread(() -> handleMediaPermission(request));
+            }
+
+            @Override
             public boolean onShowFileChooser(
                     WebView view,
                     ValueCallback<Uri[]> callback,
@@ -122,7 +135,44 @@ public final class MainActivity extends Activity {
         else super.onBackPressed();
     }
 
+    private void handleMediaPermission(PermissionRequest request) {
+        boolean wantsAudio = false;
+        boolean wantsVideo = false;
+        for (String resource : request.getResources()) {
+            if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) wantsAudio = true;
+            else if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(resource)) wantsVideo = true;
+        }
+        if (!wantsAudio && !wantsVideo) {
+            request.deny();
+            return;
+        }
+        List<String> missing = new ArrayList<>();
+        if (wantsAudio && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.RECORD_AUDIO);
+        }
+        if (wantsVideo && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.CAMERA);
+        }
+        if (!missing.isEmpty()) {
+            if (pendingMediaRequest != null && pendingMediaRequest != request) pendingMediaRequest.deny();
+            pendingMediaRequest = request;
+            pendingMediaAudio = wantsAudio;
+            pendingMediaVideo = wantsVideo;
+            requestPermissions(missing.toArray(new String[0]), MEDIA_PERMISSION_REQUEST);
+            return;
+        }
+        request.grant(request.getResources());
+    }
+
     private boolean launchCamera() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                != PackageManager.PERMISSION_GRANTED) {
+            pendingCameraLaunch = true;
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+            return true;
+        }
         Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         if (camera.resolveActivity(getPackageManager()) == null) return false;
         try {
@@ -421,6 +471,50 @@ public final class MainActivity extends Activity {
     public void onRequestPermissionsResult(
             int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == MEDIA_PERMISSION_REQUEST) {
+            PermissionRequest request = pendingMediaRequest;
+            boolean wantsAudio = pendingMediaAudio;
+            boolean wantsVideo = pendingMediaVideo;
+            pendingMediaRequest = null;
+            pendingMediaAudio = false;
+            pendingMediaVideo = false;
+            if (request == null) return;
+            List<String> allowed = new ArrayList<>();
+            if (wantsAudio && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED) {
+                allowed.add(PermissionRequest.RESOURCE_AUDIO_CAPTURE);
+            }
+            if (wantsVideo && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                    == PackageManager.PERMISSION_GRANTED) {
+                allowed.add(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
+            }
+            if (!allowed.isEmpty()) {
+                request.grant(allowed.toArray(new String[0]));
+            } else {
+                request.deny();
+            }
+            if (allowed.size() < (wantsAudio ? 1 : 0) + (wantsVideo ? 1 : 0)) {
+                Toast.makeText(this, "Allow camera and microphone in Android settings to share them in class.",
+                        Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+        if (requestCode == CAMERA_PERMISSION_REQUEST) {
+            boolean wasPending = pendingCameraLaunch;
+            pendingCameraLaunch = false;
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                if (wasPending && !launchCamera()) {
+                    if (pendingFileCallback != null) pendingFileCallback.onReceiveValue(null);
+                    pendingFileCallback = null;
+                    Toast.makeText(this, "Could not open the camera. Choose a saved photo instead.", Toast.LENGTH_LONG).show();
+                }
+            } else if (pendingFileCallback != null) {
+                pendingFileCallback.onReceiveValue(null);
+                pendingFileCallback = null;
+                Toast.makeText(this, "Camera permission was denied. Choose a saved photo instead.", Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
         if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return;
         if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             if (pendingReminderTitle != null) {
@@ -439,7 +533,23 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onPause() {
+        if (webView != null) webView.onPause();
+        super.onPause();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (webView != null) webView.onResume();
+    }
+
+    @Override
     protected void onDestroy() {
+        if (pendingMediaRequest != null) {
+            pendingMediaRequest.deny();
+            pendingMediaRequest = null;
+        }
         if (webView != null) {
             webView.removeJavascriptInterface("BrightPathNative");
             webView.destroy();
