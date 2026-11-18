@@ -1,10 +1,30 @@
 # InfinityFree-only configuration and uploaded student work
 backend/api/config.php
+htdocs1/api/config.php
+github files/backend/api/config.php
 backend/api/storage/*
 !backend/api/storage/.htaccess
 !backend/api/storage/index.html
+htdocs1/api/storage/*
+!htdocs1/api/storage/.htaccess
+!htdocs1/api/storage/index.html
+github files/backend/api/storage/*
+!github files/backend/api/storage/.htaccess
+!github files/backend/api/storage/index.html
+
+# Android build output and signing material
+android/keys/
 android/.gradle/
 android/local.properties
 android/**/build/
 *.jks
 *.keystore
+*.apk
+*.aab
+
+# Local APK kept for manual upload to InfinityFree
+htdocs1/downloads/*.apk
+
+# Temporary local preview files
+_preview*.html
+_runtime-test.html

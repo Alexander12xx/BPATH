@@ -1,74 +1,253 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f7f8fc">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="description" content="BrightPath makes learning feel like an adventure for grades 1–8.">
-    <title>BrightPath Learning App</title>
-    <link rel="manifest" href="./manifest.json">
-    <link rel="icon" href="./icon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="./styles.css">
-    <script src="./site-config.js" defer></script>
-  </head>
-  <body>
-    <aside class="android-install-banner" id="android-install-banner" hidden aria-label="Android app download">
-      <div class="android-install-copy">
-        <span class="android-install-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24"><path d="M7 8.5 5.7 6.3M17 8.5l1.3-2.2M5.5 10.5h13v7a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-7Zm3.2-2a3.3 3.3 0 0 1 6.6 0M8.5 13v2m7-2v2"/></svg>
-        </span>
-        <span><strong>BrightPath for Android</strong><small>Check for the native Android download. Web install is a different app.</small></span>
-      </div>
-      <a id="android-download-link" class="android-download-link" href="#" hidden>Download APK</a>
-    </aside>
-    <div class="app-shell">
-      <aside class="sidebar" aria-label="Main navigation">
-        <a class="brand" href="#" aria-label="BrightPath home">
-          <span class="brand-mark" aria-hidden="true">b</span>
-          <span>bright<span class="brand-accent">path</span><small>LEARNING, YOUR WAY</small></span>
-        </a>
-        <div class="profile-switch">
-          <label for="role-select">VIEW DASHBOARD</label>
-          <select id="role-select" aria-label="Choose dashboard">
-            <option value="student">Student</option>
-            <option value="parent">Parent</option>
-            <option value="tutor">Tutor</option>
-            <option value="developer">Developer</option>
-          </select>
-        </div>
-        <nav id="side-nav" class="nav-list"></nav>
-        <div class="sidebar-note">
-          <span class="note-icon" aria-hidden="true">✦</span>
-          <strong>A little progress<br>goes a long way.</strong>
-          <span>Keep showing up. You’re doing great.</span>
-        </div>
-        <div class="sidebar-footer"><span class="online-dot"></span> Your learning space is ready</div>
-      </aside>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#5b3df5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="description" content="BrightPath is a friendly learning app for grades 1 to 8 with lessons, live classes, games, and family progress.">
+  <meta name="referrer" content="no-referrer">
+  <title>BrightPath Learning</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./site-config.js" defer></script>
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v10h13V10"/><path d="M9.5 20v-6h5v6"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5z"/><path d="M4 5.5v16"/><path d="M8 7h8M8 11h6"/></symbol>
+    <symbol id="i-tasks" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="2.5"/><path d="m8 9 1.5 1.5L12 8"/><path d="M14 9.5h3M8 15h9"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="12.5" height="12" rx="2.5"/><path d="m15.5 10.5 5-2.5v8l-5-2.5z"/></symbol>
+    <symbol id="i-message" viewBox="0 0 24 24"><path d="M4 5.5h16v10H9l-5 4z"/><path d="M8 9h8M8 12h5"/></symbol>
+    <symbol id="i-game" viewBox="0 0 24 24"><path d="M7 8h10a4 4 0 0 1 4 4v4a2.5 2.5 0 0 1-4.4 1.6L15 16H9l-1.6 1.6A2.5 2.5 0 0 1 3 16v-4a4 4 0 0 1 4-4Z"/><path d="M8 11v3M6.5 12.5h3M16 11.5h.01M18 13.5h.01"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v4a4 4 0 0 1-8 0z"/><path d="M8 6H4.5v1.5A3.5 3.5 0 0 0 8 11M16 6h3.5v1.5A3.5 3.5 0 0 1 16 11"/><path d="M12 12v5M8.5 21h7M10 17h4"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-9.6A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 7.5 3.2C19.5 15.4 12 20 12 20Z"/></symbol>
+    <symbol id="i-family" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a5.5 5.5 0 0 1 11 0M14 20a4.5 4.5 0 0 1 7.5-3.4"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M15.5 5.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 4 5"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4.5 6v5.5c0 4.4 3.1 7.6 7.5 9.5 4.4-1.9 7.5-5.1 7.5-9.5V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.6 2.6 0 1 1 3.2 2.5c-.7.2-.7.8-.7 1.5"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 6-2.5 6-2.5 8h17C20.5 15 18 15 18 9"/><path d="M10 20h4"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14"/><path d="M10 8l-4 4 4 4M6 12h9"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 3c.6 4.7 2.3 6.4 7 7-4.7.6-6.4 2.3-7 7-.6-4.7-2.3-6.4-7-7 4.7-.6 6.4-2.3 7-7Z"/><path d="M19 15c.2 1.7.8 2.3 2.5 2.5-1.7.2-2.3.8-2.5 2.5-.2-1.7-.8-2.3-2.5-2.5 1.7-.2 2.3-.8 2.5-2.5Z"/></symbol>
+    <symbol id="i-rocket" viewBox="0 0 24 24"><path d="M14 4c3.5 0 6 2.5 6 6l-7.5 7.5-4-4z"/><path d="m8.5 13.5-3.5.5.5-3.5 2-2L12 12z"/><path d="M6 18c-1.2.2-2.2 1.2-2.5 3 1.8-.3 2.8-1.3 3-2.5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M9 21h6"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><rect x="3" y="7" width="12" height="10" rx="2.5"/><path d="m15 10.5 5-2.5v8l-5-2.5z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.5l3.5 2"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M8 11l4 4 4-4"/><path d="M4 18v2h16v-2"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2.5"/><path d="M15.5 5.5A2.5 2.5 0 0 0 13 3H6a3 3 0 0 0-3 3v7a2.5 2.5 0 0 0 2.5 2.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="m4 12 16-8-5 16-3-6z"/><path d="m12 14 8-10"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10" width="15" height="11" rx="2.5"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/><path d="M12 14v3"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-pencil" viewBox="0 0 24 24"><path d="m4 20 4.5-1L20 7.5 16.5 4 5 15.5z"/><path d="m14.5 6 3.5 3.5"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V4M4 20h16"/><path d="M8 16v-4M12 16V8M16 16v-7"/></symbol>
+    <symbol id="i-leaf" viewBox="0 0 24 24"><path d="M5 19c0-8 5-13 14-14 1 9-4 15-12 15"/><path d="M5 19c2-4 5-7 9-9"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2.5 20a5.5 5.5 0 0 1 11 0M14 20a4.5 4.5 0 0 1 7.5-3.4"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2 6"/><path d="M20 4v7h-7"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v5M14 11v5"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="m4 20 4.5-1L20 7.5 16.5 4 5 15.5z"/><path d="m14.5 6 3.5 3.5"/></symbol>
+    <symbol id="i-fingerprint" viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0"/><path d="M7.5 12a4.5 4.5 0 0 1 9 0v3"/><path d="M10 12a2 2 0 0 1 4 0v4"/><path d="M12.5 16v3M5 15.5v2M18.5 17v2.5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M14 7l5 5-5 5"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6.5 19a4.5 4.5 0 0 1-.7-8.9A6 6 0 0 1 17.5 9 4.8 4.8 0 0 1 17 19z"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"/></symbol>
+  </svg>
 
-      <main class="main-content">
-        <header class="topbar">
-          <button class="mobile-brand" id="mobile-home" aria-label="Go to dashboard"><span class="brand-mark">b</span> brightpath</button>
-          <div class="breadcrumb"><span id="greeting">Good morning</span><span class="breadcrumb-dot">/</span><strong id="page-title">My learning</strong></div>
-          <div class="topbar-actions">
-            <label class="search-box" aria-label="Search lessons and activities">
-              <span aria-hidden="true">⌕</span>
-              <input id="search-input" type="search" placeholder="Search anything..." autocomplete="off">
-              <kbd>/</kbd>
-            </label>
-            <button class="icon-button" id="install-button" aria-label="Install BrightPath" title="Install BrightPath" hidden>⇩</button>
-            <button class="icon-button notification-button" id="notification-button" aria-label="Turn on notifications" title="Turn on notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9m-8 12h4"/></svg><span class="notification-dot"></span></button>
-            <button class="user-chip" id="profile-button" aria-label="Current profile"><span class="avatar avatar-purple" id="header-avatar">A</span><span class="user-chip-name" id="header-name">Alex Morgan</span><span class="chevron">⌄</span></button>
-          </div>
-        </header>
-        <section id="page-content" class="page-content" aria-live="polite"></section>
-        <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation"></nav>
-      </main>
+  <section id="auth-view" class="auth-view">
+    <div class="auth-art">
+      <a class="brand brand-light" href="./index.html" aria-label="BrightPath home">
+        <span class="brand-mark">B</span>
+        <span class="brand-word">bright<span>path</span></span>
+      </a>
+      <div class="auth-mascot">
+        <svg viewBox="0 0 220 220" role="img" aria-label="Pip the friendly BrightPath guide">
+          <path class="mascot-body" d="M110 28c42 0 72 25 72 62 0 19 8 31 8 46 0 38-34 60-80 60s-80-22-80-60c0-15 8-27 8-46 0-37 30-62 72-62Z"/>
+          <circle cx="84" cy="112" r="8" class="mascot-eye"/>
+          <circle cx="136" cy="112" r="8" class="mascot-eye"/>
+          <path d="M96 136c8 8 20 8 28 0" class="mascot-smile"/>
+          <path d="M110 26c-6-12 2-20 12-22 0 11-4 18-12 22Z" class="mascot-leaf"/>
+          <circle cx="58" cy="142" r="8" class="mascot-cheek"/>
+          <circle cx="162" cy="142" r="8" class="mascot-cheek"/>
+        </svg>
+        <div class="mascot-bubble">Hi! I’m Pip. Ready for a little adventure?</div>
+      </div>
+      <ul class="auth-points">
+        <li><svg class="icon"><use href="#i-book"/></svg> Real lessons for grades 1–8</li>
+        <li><svg class="icon"><use href="#i-video"/></svg> Live video or audio classes</li>
+        <li><svg class="icon"><use href="#i-trophy"/></svg> Stickers, games, and progress</li>
+        <li><svg class="icon"><use href="#i-shield"/></svg> Parent-approved, safer accounts</li>
+      </ul>
+      <a class="auth-download" href="./index.html#android"><svg class="icon"><use href="#i-download"/></svg> Get the Android app</a>
     </div>
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <div id="modal-root"></div>
-    <script src="./app.js" defer></script>
-  </body>
+
+    <div class="auth-panel">
+      <div class="auth-mobile-brand">
+        <span class="brand-mark">B</span>
+        <span class="brand-word">bright<span>path</span></span>
+      </div>
+      <div class="auth-tabs" role="tablist">
+        <button class="auth-tab is-active" data-auth-tab="login" role="tab" aria-selected="true">Sign in</button>
+        <button class="auth-tab" data-auth-tab="register" role="tab" aria-selected="false">Create account</button>
+      </div>
+
+      <form id="login-form" class="auth-form" autocomplete="on" novalidate>
+        <h1>Welcome back</h1>
+        <p class="muted">Sign in and pick up where you left off.</p>
+        <label class="field"><span>Email</span><input id="login-email" type="email" inputmode="email" autocomplete="username" required placeholder="you@example.com"></label>
+        <label class="field"><span>Password</span>
+          <span class="password-wrap"><input id="login-password" type="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters"><button type="button" class="peek" data-peek="login-password" aria-label="Show password"><svg class="icon"><use href="#i-eye"/></svg></button></span>
+        </label>
+        <div class="form-row"><label class="check"><input id="login-remember" type="checkbox" checked> <span>Remember me on this device</span></label><button type="button" class="link-button" id="forgot-button">Forgot password?</button></div>
+        <button class="button button-primary button-wide" type="submit" id="login-submit">Sign in</button>
+        <button class="button button-biometric button-wide" type="button" id="biometric-unlock" hidden><svg class="icon"><use href="#i-fingerprint"/></svg> Unlock with fingerprint</button>
+        <p class="form-note">Younger learners: ask a parent or tutor if you need help signing in.</p>
+      </form>
+
+      <form id="register-form" class="auth-form" hidden novalidate>
+        <h1>Start your path</h1>
+        <p class="muted">Choose who you are, then make a safe account.</p>
+        <div class="role-picker" role="radiogroup" aria-label="Account type">
+          <label class="role-option is-active"><input type="radio" name="register-role" value="student" checked><span><svg class="icon"><use href="#i-star"/></svg> Student</span></label>
+          <label class="role-option"><input type="radio" name="register-role" value="parent"><span><svg class="icon"><use href="#i-family"/></svg> Parent</span></label>
+          <label class="role-option"><input type="radio" name="register-role" value="tutor"><span><svg class="icon"><use href="#i-pencil"/></svg> Tutor</span></label>
+        </div>
+        <div class="form-grid">
+          <label class="field"><span>Name</span><input id="register-name" autocomplete="name" required maxlength="120" placeholder="Your name"></label>
+          <label class="field"><span>Email</span><input id="register-email" type="email" inputmode="email" autocomplete="email" required placeholder="you@example.com"></label>
+        </div>
+        <div class="form-grid">
+          <label class="field"><span>Password</span>
+            <span class="password-wrap"><input id="register-password" type="password" autocomplete="new-password" required minlength="8" placeholder="At least 8 characters"><button type="button" class="peek" data-peek="register-password" aria-label="Show password"><svg class="icon"><use href="#i-eye"/></svg></button></span>
+          </label>
+          <label class="field" id="grade-field"><span>Grade</span>
+            <select id="register-grade" required>
+              <option value="">Choose grade</option>
+              <option value="1">Grade 1</option><option value="2">Grade 2</option><option value="3">Grade 3</option><option value="4">Grade 4</option>
+              <option value="5">Grade 5</option><option value="6">Grade 6</option><option value="7">Grade 7</option><option value="8">Grade 8</option>
+            </select>
+          </label>
+        </div>
+        <label class="field"><span>Avatar</span>
+          <select id="register-avatar">
+            <option value="star">Star</option><option value="rocket">Rocket</option><option value="book">Book</option><option value="fox">Fox</option>
+            <option value="panda">Panda</option><option value="owl">Owl</option><option value="cat">Cat</option><option value="robot">Robot</option>
+            <option value="flower">Flower</option><option value="moon">Moon</option>
+          </select>
+        </label>
+        <label class="field"><span>School invite code <em>(optional)</em></span><input id="register-invite" maxlength="8" placeholder="For example 7KQ2M9XA"></label>
+        <div id="student-consent-fields">
+          <label class="field"><span>Parent or guardian email</span><input id="register-guardian" type="email" inputmode="email" placeholder="parent@example.com"></label>
+          <label class="check check-box"><input id="register-consent" type="checkbox"> <span>My parent or guardian says it is okay to use BrightPath and agrees to the family safety rules.</span></label>
+        </div>
+        <p id="register-tutor-note" class="form-note" hidden>Tutor accounts are reviewed by a school administrator before first sign-in.</p>
+        <button class="button button-primary button-wide" type="submit" id="register-submit">Create my account</button>
+        <p class="form-note">Never share your password. BrightPath will never ask for it by email.</p>
+      </form>
+
+      <form id="forgot-form" class="auth-form" hidden novalidate>
+        <h1>Need help signing in?</h1>
+        <p class="muted">Enter your email. If mail is enabled, a recovery link is sent. Otherwise your parent, tutor, or school administrator can create a temporary password.</p>
+        <label class="field"><span>Email</span><input id="forgot-email" type="email" inputmode="email" required placeholder="you@example.com"></label>
+        <button class="button button-primary button-wide" type="submit">Send recovery help</button>
+        <button class="button button-quiet button-wide" type="button" id="forgot-back">Back to sign in</button>
+      </form>
+      <p class="auth-legal">BrightPath keeps learning data private. Parents can review progress from the Family page.</p>
+    </div>
+  </section>
+
+  <div id="app-view" class="app-shell" hidden>
+    <div class="scrim" id="nav-scrim" hidden></div>
+    <aside class="sidebar" id="sidebar" aria-label="Main navigation">
+      <a class="brand" href="#" data-page="home" aria-label="BrightPath home">
+        <span class="brand-mark">B</span>
+        <span class="brand-word">bright<span>path</span></span>
+      </a>
+      <div class="sidebar-profile">
+        <span class="avatar avatar-lg" id="sidebar-avatar">S</span>
+        <div><strong id="sidebar-name">Learner</strong><small id="sidebar-role">Student</small></div>
+      </div>
+      <nav id="side-nav" class="nav-list"></nav>
+      <div class="sidebar-card">
+        <svg class="icon"><use href="#i-sparkle"/></svg>
+        <strong>A little progress<br>every day.</strong>
+        <span id="sidebar-tip">You’re doing great.</span>
+      </div>
+      <div class="sidebar-footer">
+        <span class="online-dot"></span>
+        <span id="connection-label">Connected</span>
+        <button class="icon-button tiny" id="sidebar-help" aria-label="Help"><svg class="icon"><use href="#i-help"/></svg></button>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <button class="icon-button mobile-only" id="menu-button" aria-label="Open menu"><svg class="icon"><use href="#i-menu"/></svg></button>
+        <div class="topbar-title"><small id="greeting">Hello</small><strong id="page-title">My learning</strong></div>
+        <form class="search-box" id="search-form" role="search">
+          <svg class="icon"><use href="#i-search"/></svg>
+          <input id="search-input" type="search" placeholder="Search lessons and help" autocomplete="off" aria-label="Search">
+          <kbd>/</kbd>
+        </form>
+        <div class="topbar-actions">
+          <button class="icon-button" id="install-button" aria-label="Get the Android app" title="Get the Android app" hidden><svg class="icon"><use href="#i-download"/></svg></button>
+          <button class="icon-button notification-button" id="notification-button" aria-label="Notifications"><svg class="icon"><use href="#i-bell"/></svg><span class="notification-dot" id="notification-dot" hidden></span></button>
+          <button class="profile-chip" id="profile-button" aria-label="Open profile"><span class="avatar" id="header-avatar">S</span><span id="header-name">Learner</span><svg class="icon chevron"><use href="#i-arrow"/></svg></button>
+        </div>
+      </header>
+      <section id="page-content" class="page-content" aria-live="polite" tabindex="-1"></section>
+      <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation"></nav>
+    </main>
+  </div>
+
+  <aside id="notification-drawer" class="drawer" hidden aria-label="Notifications">
+    <div class="drawer-head"><div><small>Your updates</small><h2>Notifications</h2></div><button class="icon-button" id="notification-close" aria-label="Close"><svg class="icon"><use href="#i-close"/></svg></button></div>
+    <div class="drawer-actions"><button class="button button-quiet button-small" id="mark-all-read">Mark all as read</button><button class="button button-quiet button-small" id="enable-notifications">Allow notifications</button></div>
+    <div id="notification-list" class="notification-list"></div>
+  </aside>
+
+  <div id="modal-root"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <section id="jitsi-overlay" class="jitsi-overlay" hidden aria-label="Live class">
+    <header class="jitsi-bar">
+      <div><span class="live-pill"><span class="pulse"></span> Live class</span><strong id="jitsi-title">BrightPath class</strong></div>
+      <div class="jitsi-actions">
+        <button class="button button-quiet button-small" id="jitsi-chat-toggle"><svg class="icon"><use href="#i-message"/></svg> Class chat</button>
+        <button class="button button-danger button-small" id="jitsi-leave"><svg class="icon"><use href="#i-close"/></svg> Leave</button>
+      </div>
+    </header>
+    <div class="jitsi-stage">
+      <div id="jitsi-container"></div>
+      <aside id="class-chat-panel" class="class-chat" hidden>
+        <div class="class-chat-head"><strong>Class chat</strong><button class="icon-button tiny" id="class-chat-close" aria-label="Close chat"><svg class="icon"><use href="#i-close"/></svg></button></div>
+        <div id="class-chat-messages" class="chat-messages"></div>
+        <form id="class-chat-form" class="chat-form"><input id="class-chat-input" maxlength="1000" placeholder="Write to the class"><button class="icon-button send" aria-label="Send"><svg class="icon"><use href="#i-send"/></svg></button></form>
+      </aside>
+    </div>
+  </section>
+
+  <div id="tour" class="tour" hidden>
+    <div class="tour-card">
+      <div class="tour-top"><span id="tour-count">1 of 5</span><button class="icon-button tiny" id="tour-skip" aria-label="Skip tour"><svg class="icon"><use href="#i-close"/></svg></button></div>
+      <div class="tour-illustration" id="tour-illustration"></div>
+      <h2 id="tour-title">Welcome to BrightPath</h2>
+      <p id="tour-body">Here is a quick guide to your learning space.</p>
+      <div class="tour-dots" id="tour-dots"></div>
+      <div class="tour-actions"><button class="button button-quiet" id="tour-back">Back</button><button class="button button-primary" id="tour-next">Next</button></div>
+    </div>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
 </html>
